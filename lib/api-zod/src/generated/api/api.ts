@@ -61,6 +61,7 @@ export const GetQuizzesResponseItem = zod.object({
       question: zod.string(),
       options: zod.array(zod.string()),
       correctAnswer: zod.number(),
+      explanation: zod.string().optional(),
     }),
   ),
   createdBy: zod.string(),
@@ -79,6 +80,7 @@ export const CreateQuizBody = zod.object({
       question: zod.string(),
       options: zod.array(zod.string()),
       correctAnswer: zod.number(),
+      explanation: zod.string().optional(),
     }),
   ),
 });
@@ -99,6 +101,7 @@ export const GetQuizResponse = zod.object({
       question: zod.string(),
       options: zod.array(zod.string()),
       correctAnswer: zod.number(),
+      explanation: zod.string().optional(),
     }),
   ),
   createdBy: zod.string(),
@@ -162,4 +165,41 @@ export const GetAttemptResponse = zod.object({
   score: zod.number(),
   totalQuestions: zod.number(),
   completedAt: zod.string(),
+});
+
+/**
+ * @summary Generate quiz questions using AI
+ */
+export const generateQuizBodyNumberOfQuestionsMax = 20;
+
+export const GenerateQuizBody = zod.object({
+  topic: zod.string(),
+  difficulty: zod.enum(["easy", "medium", "hard"]),
+  numberOfQuestions: zod
+    .number()
+    .min(1)
+    .max(generateQuizBodyNumberOfQuestionsMax),
+});
+
+export const generateQuizResponseQuestionsItemOptionsMin = 4;
+export const generateQuizResponseQuestionsItemOptionsMax = 4;
+
+export const generateQuizResponseQuestionsItemCorrectAnswerMin = 0;
+export const generateQuizResponseQuestionsItemCorrectAnswerMax = 3;
+
+export const GenerateQuizResponse = zod.object({
+  questions: zod.array(
+    zod.object({
+      question: zod.string(),
+      options: zod
+        .array(zod.string())
+        .min(generateQuizResponseQuestionsItemOptionsMin)
+        .max(generateQuizResponseQuestionsItemOptionsMax),
+      correctAnswer: zod
+        .number()
+        .min(generateQuizResponseQuestionsItemCorrectAnswerMin)
+        .max(generateQuizResponseQuestionsItemCorrectAnswerMax),
+      explanation: zod.string(),
+    }),
+  ),
 });

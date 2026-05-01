@@ -16,6 +16,8 @@ tags:
     description: Quiz operations
   - name: attempts
     description: Quiz attempt operations
+  - name: generate
+    description: AI quiz generation
 paths:
   /healthz:
     get:
@@ -229,6 +231,46 @@ paths:
               schema:
                 $ref: "#/components/schemas/Attempt"
 
+  /generate-quiz:
+    post:
+      operationId: generateQuiz
+      tags: [generate]
+      summary: Generate quiz questions using AI
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateQuizBody"
+      responses:
+        "200":
+          description: Generated questions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  questions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/GeneratedQuestion"
+                required:
+                  - questions
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Generation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -314,10 +356,52 @@ components:
             type: string
         correctAnswer:
           type: integer
+        explanation:
+          type: string
       required:
         - question
         - options
         - correctAnswer
+
+    GenerateQuizBody:
+      type: object
+      properties:
+        topic:
+          type: string
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+        numberOfQuestions:
+          type: integer
+          minimum: 1
+          maximum: 20
+      required:
+        - topic
+        - difficulty
+        - numberOfQuestions
+
+    GeneratedQuestion:
+      type: object
+      properties:
+        question:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+          minItems: 4
+          maxItems: 4
+        correctAnswer:
+          type: integer
+          minimum: 0
+          maximum: 3
+        explanation:
+          type: string
+      required:
+        - question
+        - options
+        - correctAnswer
+        - explanation
 
     CreateQuizBody:
       type: object

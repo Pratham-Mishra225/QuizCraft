@@ -39,6 +39,41 @@ export interface QuizQuestion {
   question: string;
   options: string[];
   correctAnswer: number;
+  explanation?: string;
+}
+
+export type GenerateQuizBodyDifficulty =
+  (typeof GenerateQuizBodyDifficulty)[keyof typeof GenerateQuizBodyDifficulty];
+
+export const GenerateQuizBodyDifficulty = {
+  easy: "easy",
+  medium: "medium",
+  hard: "hard",
+} as const;
+
+export interface GenerateQuizBody {
+  topic: string;
+  difficulty: GenerateQuizBodyDifficulty;
+  /**
+   * @minimum 1
+   * @maximum 20
+   */
+  numberOfQuestions: number;
+}
+
+export interface GeneratedQuestion {
+  question: string;
+  /**
+   * @minItems 4
+   * @maxItems 4
+   */
+  options: string[];
+  /**
+   * @minimum 0
+   * @maximum 3
+   */
+  correctAnswer: number;
+  explanation: string;
 }
 
 export interface CreateQuizBody {
@@ -75,3 +110,7 @@ export interface Attempt {
   totalQuestions: number;
   completedAt: string;
 }
+
+export type GenerateQuiz200 = {
+  questions: GeneratedQuestion[];
+};

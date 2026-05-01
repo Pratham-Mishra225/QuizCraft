@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Quiz App"
+version = "1.0.0"
+id = "artifacts/quiz-app"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24311
+
+[services.development]
+run = "pnpm --filter @workspace/quiz-app run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/quiz-app", "run", "build" ]
+publicDir = "artifacts/quiz-app/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24311"
+BASE_PATH = "/"

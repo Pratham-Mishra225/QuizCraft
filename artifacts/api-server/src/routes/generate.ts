@@ -56,7 +56,7 @@ Do not include extra text. No markdown. Only JSON.`;
       return;
     }
 
-    const unique = validated.data.questions.filter(
+    const unique = validated.data.filter(
       (q, idx, arr) =>
         arr.findIndex(
           (other) => other.question.trim().toLowerCase() === q.question.trim().toLowerCase()

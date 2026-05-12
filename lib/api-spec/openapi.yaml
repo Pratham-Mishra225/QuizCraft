@@ -250,11 +250,63 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/GeneratedQuestion"
+                type: object
+                properties:
+                  questions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/GeneratedQuestion"
+                required:
+                  - questions
         "400":
           description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Generation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /quiz/generate-from-pdf:
+    post:
+      operationId: generateQuizFromPdf
+      tags: [generate]
+      summary: Generate a quiz from an uploaded PDF
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                difficulty:
+                  type: string
+                  enum: [easy, medium, hard]
+                numberOfQuestions:
+                  type: integer
+                  enum: [5, 10, 15, 20]
+              required:
+                - file
+                - difficulty
+                - numberOfQuestions
+      responses:
+        "201":
+          description: Quiz created from PDF
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateFromPdfResponse"
+        "400":
+          description: Validation or file error
           content:
             application/json:
               schema:
@@ -487,3 +539,14 @@ components:
         - score
         - totalQuestions
         - completedAt
+
+    GenerateFromPdfResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+      required:
+        - id
+        - title

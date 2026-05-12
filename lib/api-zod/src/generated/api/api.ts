@@ -194,3 +194,11 @@ export const GenerateQuizResponse = zod.array(
     explanation: zod.string(),
   }),
 );
+
+/**
+ * @summary Generate a quiz from an uploaded PDF
+ */
+export const GenerateFromPdfResponse = zod.object({
+  id: zod.string(),
+  title: zod.string(),
+});

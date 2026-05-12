@@ -12,6 +12,8 @@ export interface IQuiz extends Document {
   description?: string;
   questions: IQuestion[];
   createdBy: Types.ObjectId;
+  quizType?: string;
+  sourceFileName?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -32,6 +34,8 @@ const QuizSchema = new Schema<IQuiz>(
     description: { type: String, default: "" },
     questions: { type: [QuestionSchema], required: true },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    quizType: { type: String, default: "manual" },
+    sourceFileName: { type: String, default: "" },
   },
   { timestamps: true }
 );

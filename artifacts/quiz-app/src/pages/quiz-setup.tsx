@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -41,6 +41,8 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
+  FileUp,
+  X,
 } from "lucide-react";
 import { Layout } from "@/components/layout";
 import { useAuth } from "@/hooks/use-auth";
@@ -62,13 +64,15 @@ const quizSchema = z.object({
 
 type QuizFormValues = z.infer<typeof quizSchema>;
 
-type Mode = "ai" | "manual";
+type Mode = "ai" | "pdf" | "manual";
 
 const difficultyLabels: Record<string, string> = {
   easy: "Easy — beginner-friendly factual questions",
   medium: "Medium — requires understanding & application",
   hard: "Hard — deep knowledge & critical thinking",
 };
+
+const correctAnswerIndex: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
 
 export default function QuizSetupPage() {
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
@@ -77,9 +81,19 @@ export default function QuizSetupPage() {
   const queryClient = useQueryClient();
 
   const [mode, setMode] = useState<Mode>("ai");
+
+  // AI mode state
   const [aiTopic, setAiTopic] = useState("");
   const [aiDifficulty, setAiDifficulty] = useState<"easy" | "medium" | "hard">("medium");
   const [aiCount, setAiCount] = useState(5);
+
+  // PDF mode state
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfDifficulty, setPdfDifficulty] = useState<"easy" | "medium" | "hard">("medium");
+  const [pdfCount, setPdfCount] = useState<5 | 10 | 15 | 20>(10);
+  const [isPdfGenerating, setIsPdfGenerating] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [expandedExplanations, setExpandedExplanations] = useState<Record<number, boolean>>({});
 
   const generateMutation = useGenerateQuiz();
@@ -116,7 +130,7 @@ export default function QuizSetupPage() {
           const generated = res.questions.map((q) => ({
             question: q.question,
             options: q.options as [string, string, string, string],
-            correctAnswer: q.correctAnswer,
+            correctAnswer: correctAnswerIndex[q.correctAnswer as string] ?? 0,
             explanation: q.explanation,
           }));
           replace(generated);
@@ -142,6 +156,78 @@ export default function QuizSetupPage() {
         },
       }
     );
+  };
+
+  const handlePdfGenerate = async () => {
+    if (!pdfFile) {
+      toast({ variant: "destructive", title: "PDF required", description: "Please select a PDF file." });
+      return;
+    }
+
+    const token = localStorage.getItem("quiz_token");
+    if (!token) {
+      toast({ variant: "destructive", title: "Not authenticated", description: "Please log in again." });
+      return;
+    }
+
+    setIsPdfGenerating(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", pdfFile);
+      formData.append("difficulty", pdfDifficulty);
+      formData.append("numberOfQuestions", String(pdfCount));
+
+      const res = await fetch("/api/quiz/generate-from-pdf", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast({
+          variant: "destructive",
+          title: "Generation failed",
+          description: data.message || "Could not generate quiz from PDF.",
+        });
+        return;
+      }
+
+      queryClient.invalidateQueries({ queryKey: getGetQuizzesQueryKey() });
+      toast({ title: "Quiz created!", description: `"${data.title}" is ready to take.` });
+      setLocation(`/quiz/${data.id}`);
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Something went wrong. Please try again.",
+      });
+    } finally {
+      setIsPdfGenerating(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      toast({ variant: "destructive", title: "Invalid file type", description: "Only PDF files are allowed." });
+      e.target.value = "";
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ variant: "destructive", title: "File too large", description: "Maximum file size is 5 MB." });
+      e.target.value = "";
+      return;
+    }
+    setPdfFile(file);
+  };
+
+  const clearFile = () => {
+    setPdfFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const onSubmit = (data: QuizFormValues) => {
@@ -180,10 +266,11 @@ export default function QuizSetupPage() {
           </Button>
           <h1 className="text-3xl font-bold tracking-tight">Create a New Quiz</h1>
           <p className="text-muted-foreground mt-2">
-            Generate questions with AI or build your quiz manually.
+            Generate questions with AI, upload a PDF, or build your quiz manually.
           </p>
         </div>
 
+        {/* Mode selector */}
         <div className="flex gap-2 mb-8 p-1 bg-muted rounded-xl w-fit">
           <Button
             type="button"
@@ -196,6 +283,15 @@ export default function QuizSetupPage() {
           </Button>
           <Button
             type="button"
+            variant={mode === "pdf" ? "default" : "ghost"}
+            className={`rounded-lg gap-2 ${mode === "pdf" ? "shadow-sm" : "text-muted-foreground"}`}
+            onClick={() => setMode("pdf")}
+          >
+            <FileUp className="h-4 w-4" />
+            PDF Quiz
+          </Button>
+          <Button
+            type="button"
             variant={mode === "manual" ? "default" : "ghost"}
             className={`rounded-lg gap-2 ${mode === "manual" ? "shadow-sm" : "text-muted-foreground"}`}
             onClick={() => setMode("manual")}
@@ -205,6 +301,7 @@ export default function QuizSetupPage() {
           </Button>
         </div>
 
+        {/* AI Generate panel */}
         {mode === "ai" && (
           <Card className="mb-8 border-2 border-primary/30 shadow-md bg-gradient-to-br from-primary/5 to-background">
             <CardHeader className="border-b border-primary/10">
@@ -285,189 +382,488 @@ export default function QuizSetupPage() {
           </Card>
         )}
 
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 pb-24">
-          <Card className="border-2 shadow-sm border-primary/20">
-            <CardHeader className="bg-primary/5 border-b">
-              <CardTitle>General Information</CardTitle>
-              <CardDescription>Give your quiz a title and description</CardDescription>
+        {/* PDF Generate panel */}
+        {mode === "pdf" && (
+          <Card className="mb-8 border-2 border-orange-400/30 shadow-md bg-gradient-to-br from-orange-50/50 to-background dark:from-orange-950/20">
+            <CardHeader className="border-b border-orange-400/10">
+              <CardTitle className="flex items-center gap-2">
+                <FileUp className="h-5 w-5 text-orange-500" />
+                PDF Quiz Generator
+              </CardTitle>
+              <CardDescription>
+                Upload a PDF document and Gemini will generate quiz questions based on its content.
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6 pt-6">
+            <CardContent className="pt-6 space-y-6">
+              {/* File upload */}
               <div className="space-y-2">
-                <Label htmlFor="title">Quiz Title</Label>
-                <Input
-                  id="title"
-                  placeholder="e.g. Advanced JavaScript Concepts"
-                  {...form.register("title")}
-                  className={form.formState.errors.title ? "border-destructive" : ""}
-                />
-                {form.formState.errors.title && (
-                  <p className="text-sm text-destructive">{form.formState.errors.title.message}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">Description (Optional)</Label>
-                <Textarea
-                  id="description"
-                  placeholder="What will this quiz cover?"
-                  {...form.register("description")}
-                  className="min-h-[80px]"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-semibold tracking-tight">Questions</h2>
-              <span className="text-sm font-medium bg-secondary text-secondary-foreground px-3 py-1 rounded-full">
-                {fields.length} Question{fields.length !== 1 ? "s" : ""}
-              </span>
-            </div>
-
-            {fields.map((field, index) => {
-              const explanation = form.watch(`questions.${index}.explanation`);
-              const isExpanded = expandedExplanations[index];
-              return (
-                <Card
-                  key={field.id}
-                  className="relative shadow-sm border-l-4 border-l-primary hover:border-l-primary/70 transition-colors"
-                >
-                  <div className="absolute top-4 right-4 flex items-center gap-2">
-                    {explanation && (
-                      <Badge variant="secondary" className="text-xs gap-1 cursor-pointer" onClick={() => toggleExplanation(index)}>
-                        <Info className="h-3 w-3" />
-                        Explanation
-                        {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                      </Badge>
-                    )}
-                    {fields.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => remove(index)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
+                <Label>PDF File</Label>
+                {pdfFile ? (
+                  <div className="flex items-center gap-3 p-3 rounded-lg border border-orange-300/50 bg-orange-50/50 dark:bg-orange-950/20">
+                    <FileUp className="h-5 w-5 text-orange-500 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{pdfFile.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(pdfFile.size / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="flex-shrink-0 text-muted-foreground hover:text-destructive"
+                      onClick={clearFile}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
                   </div>
-
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <span className="bg-primary/20 text-primary w-6 h-6 rounded-full inline-flex items-center justify-center text-sm font-bold flex-shrink-0">
-                        {index + 1}
-                      </span>
-                      Question {index + 1}
-                    </CardTitle>
-                  </CardHeader>
-
-                  <CardContent className="space-y-6">
-                    <div className="space-y-2">
-                      <Label>Question Text</Label>
-                      <Input
-                        placeholder="e.g. What is the output of typeof null in JavaScript?"
-                        {...form.register(`questions.${index}.question` as const)}
-                      />
-                      {form.formState.errors.questions?.[index]?.question && (
-                        <p className="text-sm text-destructive">
-                          {form.formState.errors.questions[index]?.question?.message}
-                        </p>
-                      )}
+                ) : (
+                  <div
+                    className="flex flex-col items-center justify-center gap-3 p-8 rounded-lg border-2 border-dashed border-orange-300/50 bg-orange-50/30 dark:bg-orange-950/10 cursor-pointer hover:border-orange-400/70 hover:bg-orange-50/50 transition-all"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <FileUp className="h-8 w-8 text-orange-400" />
+                    <div className="text-center">
+                      <p className="text-sm font-medium">Click to upload a PDF</p>
+                      <p className="text-xs text-muted-foreground mt-1">PDF only · Max 5 MB</p>
                     </div>
+                  </div>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/pdf"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+              </div>
 
-                    <div className="space-y-4 bg-muted/30 p-4 rounded-lg border border-border/50">
-                      <Label className="text-base font-semibold">Options & Correct Answer</Label>
-                      <RadioGroup
-                        value={form.watch(`questions.${index}.correctAnswer`).toString()}
-                        onValueChange={(val) =>
-                          form.setValue(`questions.${index}.correctAnswer`, parseInt(val, 10))
-                        }
-                        className="space-y-3"
-                      >
-                        {[0, 1, 2, 3].map((optIndex) => (
-                          <div key={optIndex} className="flex items-center gap-3">
-                            <RadioGroupItem
-                              value={optIndex.toString()}
-                              id={`q${index}-opt${optIndex}`}
-                              className="mt-1 flex-shrink-0"
-                            />
-                            <div className="flex-1">
-                              <Input
-                                placeholder={`Option ${optIndex + 1}`}
-                                {...form.register(
-                                  `questions.${index}.options.${optIndex}` as const
-                                )}
-                                className={
-                                  form.watch(`questions.${index}.correctAnswer`) === optIndex
-                                    ? "border-primary/50 bg-primary/5"
-                                    : ""
-                                }
-                              />
-                              {form.formState.errors.questions?.[index]?.options?.[optIndex] && (
-                                <p className="text-sm text-destructive mt-1">
-                                  {
-                                    form.formState.errors.questions[index]?.options?.[optIndex]
-                                      ?.message
-                                  }
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </RadioGroup>
-                    </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="pdf-difficulty">Difficulty</Label>
+                  <Select
+                    value={pdfDifficulty}
+                    onValueChange={(v) => setPdfDifficulty(v as "easy" | "medium" | "hard")}
+                  >
+                    <SelectTrigger id="pdf-difficulty">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="easy">Easy</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="hard">Hard</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{difficultyLabels[pdfDifficulty]}</p>
+                </div>
 
-                    {explanation && isExpanded && (
-                      <div className="flex gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-200">
-                        <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                        <span>{explanation}</span>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
+                <div className="space-y-2">
+                  <Label htmlFor="pdf-count">Number of Questions</Label>
+                  <Select
+                    value={String(pdfCount)}
+                    onValueChange={(v) => setPdfCount(Number(v) as 5 | 10 | 15 | 20)}
+                  >
+                    <SelectTrigger id="pdf-count">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 questions</SelectItem>
+                      <SelectItem value="10">10 questions</SelectItem>
+                      <SelectItem value="15">15 questions</SelectItem>
+                      <SelectItem value="20">20 questions</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full h-14 border-dashed border-2 hover:border-primary/50 hover:bg-primary/5 text-muted-foreground hover:text-foreground transition-all"
-              onClick={() =>
-                append({ question: "", options: ["", "", "", ""], correctAnswer: 0, explanation: "" })
-              }
-            >
-              <PlusCircle className="mr-2 h-5 w-5" />
-              Add Another Question
-            </Button>
-          </div>
-
-          <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-md border-t z-10">
-            <div className="container max-w-4xl mx-auto flex items-center justify-between gap-4">
-              <p className="text-sm text-muted-foreground hidden sm:block">
-                {fields.length} question{fields.length !== 1 ? "s" : ""} ready
-              </p>
               <Button
-                type="submit"
+                type="button"
                 size="lg"
-                className="w-full sm:w-auto h-12 px-8 shadow-lg"
-                disabled={isPending}
+                className="w-full h-12 text-base gap-2 bg-orange-500 hover:bg-orange-600 text-white"
+                onClick={handlePdfGenerate}
+                disabled={isPdfGenerating || !pdfFile}
               >
-                {isPending ? (
+                {isPdfGenerating ? (
                   <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    Creating Quiz...
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Generating quiz from PDF...
                   </>
                 ) : (
                   <>
-                    <Save className="mr-2 h-5 w-5" />
-                    Save & Finish
+                    <Sparkles className="h-5 w-5" />
+                    Generate Quiz from PDF
                   </>
                 )}
               </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Manual edit form — shown in manual mode, or after AI generation switches to manual */}
+        {mode === "manual" && (
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 pb-24">
+            <Card className="border-2 shadow-sm border-primary/20">
+              <CardHeader className="bg-primary/5 border-b">
+                <CardTitle>General Information</CardTitle>
+                <CardDescription>Give your quiz a title and description</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6 pt-6">
+                <div className="space-y-2">
+                  <Label htmlFor="title">Quiz Title</Label>
+                  <Input
+                    id="title"
+                    placeholder="e.g. Advanced JavaScript Concepts"
+                    {...form.register("title")}
+                    className={form.formState.errors.title ? "border-destructive" : ""}
+                  />
+                  {form.formState.errors.title && (
+                    <p className="text-sm text-destructive">{form.formState.errors.title.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description (Optional)</Label>
+                  <Textarea
+                    id="description"
+                    placeholder="What will this quiz cover?"
+                    {...form.register("description")}
+                    className="min-h-[80px]"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-semibold tracking-tight">Questions</h2>
+                <span className="text-sm font-medium bg-secondary text-secondary-foreground px-3 py-1 rounded-full">
+                  {fields.length} Question{fields.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+
+              {fields.map((field, index) => {
+                const explanation = form.watch(`questions.${index}.explanation`);
+                const isExpanded = expandedExplanations[index];
+                return (
+                  <Card
+                    key={field.id}
+                    className="relative shadow-sm border-l-4 border-l-primary hover:border-l-primary/70 transition-colors"
+                  >
+                    <div className="absolute top-4 right-4 flex items-center gap-2">
+                      {explanation && (
+                        <Badge variant="secondary" className="text-xs gap-1 cursor-pointer" onClick={() => toggleExplanation(index)}>
+                          <Info className="h-3 w-3" />
+                          Explanation
+                          {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                        </Badge>
+                      )}
+                      {fields.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => remove(index)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <span className="bg-primary/20 text-primary w-6 h-6 rounded-full inline-flex items-center justify-center text-sm font-bold flex-shrink-0">
+                          {index + 1}
+                        </span>
+                        Question {index + 1}
+                      </CardTitle>
+                    </CardHeader>
+
+                    <CardContent className="space-y-6">
+                      <div className="space-y-2">
+                        <Label>Question Text</Label>
+                        <Input
+                          placeholder="e.g. What is the output of typeof null in JavaScript?"
+                          {...form.register(`questions.${index}.question` as const)}
+                        />
+                        {form.formState.errors.questions?.[index]?.question && (
+                          <p className="text-sm text-destructive">
+                            {form.formState.errors.questions[index]?.question?.message}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-4 bg-muted/30 p-4 rounded-lg border border-border/50">
+                        <Label className="text-base font-semibold">Options & Correct Answer</Label>
+                        <RadioGroup
+                          value={form.watch(`questions.${index}.correctAnswer`).toString()}
+                          onValueChange={(val) =>
+                            form.setValue(`questions.${index}.correctAnswer`, parseInt(val, 10))
+                          }
+                          className="space-y-3"
+                        >
+                          {[0, 1, 2, 3].map((optIndex) => (
+                            <div key={optIndex} className="flex items-center gap-3">
+                              <RadioGroupItem
+                                value={optIndex.toString()}
+                                id={`q${index}-opt${optIndex}`}
+                                className="mt-1 flex-shrink-0"
+                              />
+                              <div className="flex-1">
+                                <Input
+                                  placeholder={`Option ${optIndex + 1}`}
+                                  {...form.register(
+                                    `questions.${index}.options.${optIndex}` as const
+                                  )}
+                                  className={
+                                    form.watch(`questions.${index}.correctAnswer`) === optIndex
+                                      ? "border-primary/50 bg-primary/5"
+                                      : ""
+                                  }
+                                />
+                                {form.formState.errors.questions?.[index]?.options?.[optIndex] && (
+                                  <p className="text-sm text-destructive mt-1">
+                                    {
+                                      form.formState.errors.questions[index]?.options?.[optIndex]
+                                        ?.message
+                                    }
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </RadioGroup>
+                      </div>
+
+                      {explanation && isExpanded && (
+                        <div className="flex gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-200">
+                          <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                          <span>{explanation}</span>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-14 border-dashed border-2 hover:border-primary/50 hover:bg-primary/5 text-muted-foreground hover:text-foreground transition-all"
+                onClick={() =>
+                  append({ question: "", options: ["", "", "", ""], correctAnswer: 0, explanation: "" })
+                }
+              >
+                <PlusCircle className="mr-2 h-5 w-5" />
+                Add Another Question
+              </Button>
             </div>
-          </div>
-        </form>
+
+            <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-md border-t z-10">
+              <div className="container max-w-4xl mx-auto flex items-center justify-between gap-4">
+                <p className="text-sm text-muted-foreground hidden sm:block">
+                  {fields.length} question{fields.length !== 1 ? "s" : ""} ready
+                </p>
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full sm:w-auto h-12 px-8 shadow-lg"
+                  disabled={isPending}
+                >
+                  {isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Creating Quiz...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="mr-2 h-5 w-5" />
+                      Save & Finish
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {/* AI mode: show the manual form below for review after generation */}
+        {mode === "ai" && fields.length > 0 && fields[0].question !== "" && (
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 pb-24">
+            <Card className="border-2 shadow-sm border-primary/20">
+              <CardHeader className="bg-primary/5 border-b">
+                <CardTitle>General Information</CardTitle>
+                <CardDescription>Give your quiz a title and description</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6 pt-6">
+                <div className="space-y-2">
+                  <Label htmlFor="title">Quiz Title</Label>
+                  <Input
+                    id="title"
+                    placeholder="e.g. Advanced JavaScript Concepts"
+                    {...form.register("title")}
+                    className={form.formState.errors.title ? "border-destructive" : ""}
+                  />
+                  {form.formState.errors.title && (
+                    <p className="text-sm text-destructive">{form.formState.errors.title.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description (Optional)</Label>
+                  <Textarea
+                    id="description"
+                    placeholder="What will this quiz cover?"
+                    {...form.register("description")}
+                    className="min-h-[80px]"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-semibold tracking-tight">Generated Questions</h2>
+                <span className="text-sm font-medium bg-secondary text-secondary-foreground px-3 py-1 rounded-full">
+                  {fields.length} Question{fields.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+
+              {fields.map((field, index) => {
+                const explanation = form.watch(`questions.${index}.explanation`);
+                const isExpanded = expandedExplanations[index];
+                return (
+                  <Card
+                    key={field.id}
+                    className="relative shadow-sm border-l-4 border-l-primary hover:border-l-primary/70 transition-colors"
+                  >
+                    <div className="absolute top-4 right-4 flex items-center gap-2">
+                      {explanation && (
+                        <Badge variant="secondary" className="text-xs gap-1 cursor-pointer" onClick={() => toggleExplanation(index)}>
+                          <Info className="h-3 w-3" />
+                          Explanation
+                          {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                        </Badge>
+                      )}
+                      {fields.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => remove(index)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <span className="bg-primary/20 text-primary w-6 h-6 rounded-full inline-flex items-center justify-center text-sm font-bold flex-shrink-0">
+                          {index + 1}
+                        </span>
+                        Question {index + 1}
+                      </CardTitle>
+                    </CardHeader>
+
+                    <CardContent className="space-y-6">
+                      <div className="space-y-2">
+                        <Label>Question Text</Label>
+                        <Input
+                          placeholder="e.g. What is the output of typeof null in JavaScript?"
+                          {...form.register(`questions.${index}.question` as const)}
+                        />
+                        {form.formState.errors.questions?.[index]?.question && (
+                          <p className="text-sm text-destructive">
+                            {form.formState.errors.questions[index]?.question?.message}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-4 bg-muted/30 p-4 rounded-lg border border-border/50">
+                        <Label className="text-base font-semibold">Options & Correct Answer</Label>
+                        <RadioGroup
+                          value={form.watch(`questions.${index}.correctAnswer`).toString()}
+                          onValueChange={(val) =>
+                            form.setValue(`questions.${index}.correctAnswer`, parseInt(val, 10))
+                          }
+                          className="space-y-3"
+                        >
+                          {[0, 1, 2, 3].map((optIndex) => (
+                            <div key={optIndex} className="flex items-center gap-3">
+                              <RadioGroupItem
+                                value={optIndex.toString()}
+                                id={`q${index}-opt${optIndex}`}
+                                className="mt-1 flex-shrink-0"
+                              />
+                              <div className="flex-1">
+                                <Input
+                                  placeholder={`Option ${optIndex + 1}`}
+                                  {...form.register(
+                                    `questions.${index}.options.${optIndex}` as const
+                                  )}
+                                  className={
+                                    form.watch(`questions.${index}.correctAnswer`) === optIndex
+                                      ? "border-primary/50 bg-primary/5"
+                                      : ""
+                                  }
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </RadioGroup>
+                      </div>
+
+                      {explanation && isExpanded && (
+                        <div className="flex gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-200">
+                          <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                          <span>{explanation}</span>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-14 border-dashed border-2 hover:border-primary/50 hover:bg-primary/5 text-muted-foreground hover:text-foreground transition-all"
+                onClick={() =>
+                  append({ question: "", options: ["", "", "", ""], correctAnswer: 0, explanation: "" })
+                }
+              >
+                <PlusCircle className="mr-2 h-5 w-5" />
+                Add Another Question
+              </Button>
+            </div>
+
+            <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-md border-t z-10">
+              <div className="container max-w-4xl mx-auto flex items-center justify-between gap-4">
+                <p className="text-sm text-muted-foreground hidden sm:block">
+                  {fields.length} question{fields.length !== 1 ? "s" : ""} ready
+                </p>
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full sm:w-auto h-12 px-8 shadow-lg"
+                  disabled={isPending}
+                >
+                  {isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Creating Quiz...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="mr-2 h-5 w-5" />
+                      Save & Finish
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </form>
+        )}
       </div>
     </Layout>
   );

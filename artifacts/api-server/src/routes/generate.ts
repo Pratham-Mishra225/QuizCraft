@@ -14,33 +14,19 @@ router.post("/generate-quiz", requireAuth, async (req, res) => {
 
   const { topic, difficulty, numberOfQuestions } = parsed.data;
 
-  const prompt = `Generate ${numberOfQuestions} unique multiple-choice quiz questions about "${topic}" at ${difficulty} difficulty level.
+  const prompt = `Generate ${numberOfQuestions} multiple choice questions on ${topic} at ${difficulty} level.
 
-Requirements:
-- Each question must be clearly worded and unambiguous
-- Provide exactly 4 answer options in an array
-- correctAnswer is the zero-based index (0, 1, 2, or 3) of the correct option in the options array
-- The explanation must clearly explain why the correct answer is right
-- All questions must be distinct — no duplicate or paraphrased questions
-- Difficulty "${difficulty}": ${
-    difficulty === "easy"
-      ? "straightforward factual questions suitable for beginners"
-      : difficulty === "medium"
-        ? "questions requiring moderate understanding and application of concepts"
-        : "challenging questions requiring deep knowledge and critical thinking"
+Return strictly in JSON format:
+[
+  {
+    "question": "...",
+    "options": ["A", "B", "C", "D"],
+    "correctAnswer": "A",
+    "explanation": "..."
   }
+]
 
-Respond with ONLY a valid JSON object matching this exact schema:
-{
-  "questions": [
-    {
-      "question": "Question text here?",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correctAnswer": 0,
-      "explanation": "Explanation of why Option A is correct."
-    }
-  ]
-}`;
+Do not include extra text. No markdown. Only JSON.`;
 
   try {
     const response = await ai.models.generateContent({

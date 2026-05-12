@@ -250,14 +250,9 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  questions:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/GeneratedQuestion"
-                required:
-                  - questions
+                type: array
+                items:
+                  $ref: "#/components/schemas/GeneratedQuestion"
         "400":
           description: Validation error
           content:
@@ -392,9 +387,8 @@ components:
           minItems: 4
           maxItems: 4
         correctAnswer:
-          type: integer
-          minimum: 0
-          maximum: 3
+          type: string
+          enum: [A, B, C, D]
         explanation:
           type: string
       required:

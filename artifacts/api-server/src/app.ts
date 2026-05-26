@@ -1,5 +1,6 @@
 import express, { type Express } from "express";
-import cors from "cors";
+import cors, { type CorsOptions } from "cors";
+import helmet from "helmet";
 import pinoHttp from "pino-http";
 import mongoose from "mongoose";
 import router from "./routes/index.js";
@@ -7,6 +8,26 @@ import { env } from "./config/env.js";
 import { logger } from "./lib/logger.js";
 
 const app: Express = express();
+
+const normalizedFrontendUrl = env.FRONTEND_URL.replace(/\/+$/, "");
+const allowedOrigins = new Set<string>([
+  normalizedFrontendUrl,
+  ...(env.NODE_ENV === "development"
+    ? ["http://localhost:5173", "http://localhost:3000"]
+    : []),
+]);
+
+const corsOptions: CorsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    const normalizedOrigin = origin.replace(/\/+$/, "");
+    callback(null, allowedOrigins.has(normalizedOrigin));
+  },
+};
 
 app.use(
   pinoHttp({
@@ -27,7 +48,8 @@ app.use(
     },
   }),
 );
-app.use(cors());
+app.use(helmet());
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

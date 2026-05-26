@@ -56,10 +56,12 @@ Do not include extra text. No markdown. Only JSON.`;
       return;
     }
 
-    const unique = validated.data.filter(
-      (q, idx, arr) =>
+    type QuestionKey = { question: string };
+    const unique = validated.data.questions.filter(
+      (q: QuestionKey, idx: number, arr: QuestionKey[]) =>
         arr.findIndex(
-          (other) => other.question.trim().toLowerCase() === q.question.trim().toLowerCase()
+          (other: QuestionKey) =>
+            other.question.trim().toLowerCase() === q.question.trim().toLowerCase()
         ) === idx
     );
 

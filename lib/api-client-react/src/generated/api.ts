@@ -21,8 +21,10 @@ import type {
   AuthResponse,
   CreateQuizBody,
   ErrorResponse,
+  GenerateFromPdfResponse,
   GenerateQuiz200,
   GenerateQuizBody,
+  GenerateQuizFromPdfBody,
   HealthStatus,
   LoginBody,
   Quiz,
@@ -919,4 +921,97 @@ export const useGenerateQuiz = <
   TContext
 > => {
   return useMutation(getGenerateQuizMutationOptions(options));
+};
+
+/**
+ * @summary Generate a quiz from an uploaded PDF
+ */
+export const getGenerateQuizFromPdfUrl = () => {
+  return `/api/quiz/generate-from-pdf`;
+};
+
+export const generateQuizFromPdf = async (
+  generateQuizFromPdfBody: GenerateQuizFromPdfBody,
+  options?: RequestInit,
+): Promise<GenerateFromPdfResponse> => {
+  const formData = new FormData();
+  formData.append(`file`, generateQuizFromPdfBody.file);
+  formData.append(`difficulty`, generateQuizFromPdfBody.difficulty);
+  formData.append(
+    `numberOfQuestions`,
+    generateQuizFromPdfBody.numberOfQuestions.toString(),
+  );
+
+  return customFetch<GenerateFromPdfResponse>(getGenerateQuizFromPdfUrl(), {
+    ...options,
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const getGenerateQuizFromPdfMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateQuizFromPdf>>,
+    TError,
+    { data: BodyType<GenerateQuizFromPdfBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateQuizFromPdf>>,
+  TError,
+  { data: BodyType<GenerateQuizFromPdfBody> },
+  TContext
+> => {
+  const mutationKey = ["generateQuizFromPdf"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateQuizFromPdf>>,
+    { data: BodyType<GenerateQuizFromPdfBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return generateQuizFromPdf(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateQuizFromPdfMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateQuizFromPdf>>
+>;
+export type GenerateQuizFromPdfMutationBody = BodyType<GenerateQuizFromPdfBody>;
+export type GenerateQuizFromPdfMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Generate a quiz from an uploaded PDF
+ */
+export const useGenerateQuizFromPdf = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateQuizFromPdf>>,
+    TError,
+    { data: BodyType<GenerateQuizFromPdfBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateQuizFromPdf>>,
+  TError,
+  { data: BodyType<GenerateQuizFromPdfBody> },
+  TContext
+> => {
+  return useMutation(getGenerateQuizFromPdfMutationOptions(options));
 };

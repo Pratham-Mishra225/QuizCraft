@@ -4,13 +4,12 @@ import { User } from "../models/User.js";
 import { requireAuth, AuthRequest } from "../middlewares/auth.js";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { Response } from "express";
+import { env } from "../config/env.js";
 
 const router = Router();
 
 function signToken(userId: string): string {
-  const secret = process.env["JWT_SECRET"];
-  if (!secret) throw new Error("JWT_SECRET not configured");
-  return jwt.sign({ userId }, secret, { expiresIn: "7d" });
+  return jwt.sign({ userId }, env.JWT_SECRET, { expiresIn: "7d" });
 }
 
 router.post("/register", async (req, res: Response) => {

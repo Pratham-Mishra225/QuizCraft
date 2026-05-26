@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { env } from "../config/env.js";
 
 export interface AuthRequest extends Request {
   userId?: string;
@@ -14,15 +15,8 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
   }
 
   const token = authHeader.split(" ")[1];
-  const secret = process.env["JWT_SECRET"];
-
-  if (!secret) {
-    res.status(500).json({ message: "Server configuration error" });
-    return;
-  }
-
   try {
-    const payload = jwt.verify(token, secret) as { userId: string };
+    const payload = jwt.verify(token, env.JWT_SECRET) as { userId: string };
     req.userId = payload.userId;
     next();
   } catch {

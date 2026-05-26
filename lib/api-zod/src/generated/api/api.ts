@@ -183,22 +183,31 @@ export const GenerateQuizBody = zod.object({
 
 export const generateQuizResponseQuestionsItemOptionsMin = 4;
 export const generateQuizResponseQuestionsItemOptionsMax = 4;
-export const GenerateQuizResponse = zod.array(
-  zod.object({
-    question: zod.string(),
-    options: zod
-      .array(zod.string())
-      .min(generateQuizResponseQuestionsItemOptionsMin)
-      .max(generateQuizResponseQuestionsItemOptionsMax),
-    correctAnswer: zod.enum(["A", "B", "C", "D"]),
-    explanation: zod.string(),
-  }),
-);
+
+export const GenerateQuizResponse = zod.object({
+  questions: zod.array(
+    zod.object({
+      question: zod.string(),
+      options: zod
+        .array(zod.string())
+        .min(generateQuizResponseQuestionsItemOptionsMin)
+        .max(generateQuizResponseQuestionsItemOptionsMax),
+      correctAnswer: zod.enum(["A", "B", "C", "D"]),
+      explanation: zod.string(),
+    }),
+  ),
+});
 
 /**
  * @summary Generate a quiz from an uploaded PDF
  */
-export const GenerateFromPdfResponse = zod.object({
-  id: zod.string(),
-  title: zod.string(),
+export const GenerateQuizFromPdfBody = zod.object({
+  file: zod.instanceof(File),
+  difficulty: zod.enum(["easy", "medium", "hard"]),
+  numberOfQuestions: zod.union([
+    zod.literal(5),
+    zod.literal(10),
+    zod.literal(15),
+    zod.literal(20),
+  ]),
 });

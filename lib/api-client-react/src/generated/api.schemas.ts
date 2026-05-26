@@ -61,6 +61,16 @@ export interface GenerateQuizBody {
   numberOfQuestions: number;
 }
 
+export type GeneratedQuestionCorrectAnswer =
+  (typeof GeneratedQuestionCorrectAnswer)[keyof typeof GeneratedQuestionCorrectAnswer];
+
+export const GeneratedQuestionCorrectAnswer = {
+  A: "A",
+  B: "B",
+  C: "C",
+  D: "D",
+} as const;
+
 export interface GeneratedQuestion {
   question: string;
   /**
@@ -68,11 +78,7 @@ export interface GeneratedQuestion {
    * @maxItems 4
    */
   options: string[];
-  /**
-   * @minimum 0
-   * @maximum 3
-   */
-  correctAnswer: number;
+  correctAnswer: GeneratedQuestionCorrectAnswer;
   explanation: string;
 }
 
@@ -111,6 +117,36 @@ export interface Attempt {
   completedAt: string;
 }
 
+export interface GenerateFromPdfResponse {
+  id: string;
+  title: string;
+}
+
 export type GenerateQuiz200 = {
   questions: GeneratedQuestion[];
+};
+
+export type GenerateQuizFromPdfBodyDifficulty =
+  (typeof GenerateQuizFromPdfBodyDifficulty)[keyof typeof GenerateQuizFromPdfBodyDifficulty];
+
+export const GenerateQuizFromPdfBodyDifficulty = {
+  easy: "easy",
+  medium: "medium",
+  hard: "hard",
+} as const;
+
+export type GenerateQuizFromPdfBodyNumberOfQuestions =
+  (typeof GenerateQuizFromPdfBodyNumberOfQuestions)[keyof typeof GenerateQuizFromPdfBodyNumberOfQuestions];
+
+export const GenerateQuizFromPdfBodyNumberOfQuestions = {
+  NUMBER_5: 5,
+  NUMBER_10: 10,
+  NUMBER_15: 15,
+  NUMBER_20: 20,
+} as const;
+
+export type GenerateQuizFromPdfBody = {
+  file: Blob;
+  difficulty: GenerateQuizFromPdfBodyDifficulty;
+  numberOfQuestions: GenerateQuizFromPdfBodyNumberOfQuestions;
 };

@@ -5,6 +5,7 @@ import { requireAuth, AuthRequest } from "../middlewares/auth.js";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { Response } from "express";
 import { env } from "../config/env.js";
+import { authLimiter } from "../middlewares/rateLimit.js";
 
 const router = Router();
 
@@ -12,7 +13,7 @@ function signToken(userId: string): string {
   return jwt.sign({ userId }, env.JWT_SECRET, { expiresIn: "7d" });
 }
 
-router.post("/register", async (req, res: Response) => {
+router.post("/register", authLimiter, async (req, res: Response) => {
   const parsed = RegisterBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ message: "Validation error", errors: parsed.error.flatten() });
@@ -36,7 +37,7 @@ router.post("/register", async (req, res: Response) => {
   });
 });
 
-router.post("/login", async (req, res: Response) => {
+router.post("/login", authLimiter, async (req, res: Response) => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ message: "Validation error" });

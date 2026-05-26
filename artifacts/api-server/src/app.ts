@@ -6,6 +6,7 @@ import mongoose from "mongoose";
 import router from "./routes/index.js";
 import { env } from "./config/env.js";
 import { logger } from "./lib/logger.js";
+import { generalApiLimiter } from "./middlewares/rateLimit.js";
 
 const app: Express = express();
 
@@ -53,7 +54,7 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/api", router);
+app.use("/api", generalApiLimiter, router);
 
 mongoose
   .connect(env.MONGODB_URI)

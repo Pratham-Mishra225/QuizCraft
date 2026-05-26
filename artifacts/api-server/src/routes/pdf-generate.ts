@@ -10,6 +10,7 @@ import { z } from "zod";
 import { requireAuth, type AuthRequest } from "../middlewares/auth.js";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { Quiz } from "../models/Quiz.js";
+import { pdfAiLimiter } from "../middlewares/rateLimit.js";
 
 const router = Router();
 
@@ -51,6 +52,7 @@ const correctAnswerIndex: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
 router.post(
   "/quiz/generate-from-pdf",
   requireAuth,
+  pdfAiLimiter,
   (req, res, next) => {
     upload.single("file")(req, res, (err) => {
       if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {

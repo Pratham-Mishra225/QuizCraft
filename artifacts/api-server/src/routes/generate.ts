@@ -2,10 +2,11 @@ import { Router } from "express";
 import { GenerateQuizBody, GenerateQuizResponse } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth.js";
 import { ai } from "@workspace/integrations-gemini-ai";
+import { aiLimiter } from "../middlewares/rateLimit.js";
 
 const router = Router();
 
-router.post("/generate-quiz", requireAuth, async (req, res) => {
+router.post("/generate-quiz", requireAuth, aiLimiter, async (req, res) => {
   const parsed = GenerateQuizBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid input" });

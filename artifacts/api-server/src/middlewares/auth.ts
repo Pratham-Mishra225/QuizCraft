@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
+import jwt, { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";
 import { env } from "../config/env.js";
 
 export interface AuthRequest extends Request {
@@ -9,17 +9,39 @@ export interface AuthRequest extends Request {
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    res.status(401).json({ message: "Unauthorized" });
+  if (!authHeader) {
+    res.status(401).json({ message: "Authorization header missing" });
     return;
   }
 
-  const token = authHeader.split(" ")[1];
+  const match = authHeader.match(/^Bearer\s+(.+)$/);
+  if (!match) {
+    res
+      .status(401)
+      .json({ message: "Authorization header must be in the format: Bearer <token>" });
+    return;
+  }
+
+  const token = match[1].trim();
+  if (!token) {
+    res.status(401).json({ message: "Authorization token missing" });
+    return;
+  }
   try {
     const payload = jwt.verify(token, env.JWT_SECRET) as { userId: string };
     req.userId = payload.userId;
     next();
-  } catch {
-    res.status(401).json({ message: "Invalid or expired token" });
+  } catch (err) {
+    if (err instanceof TokenExpiredError) {
+      res.status(401).json({ message: "Token expired" });
+      return;
+    }
+
+    if (err instanceof JsonWebTokenError) {
+      res.status(401).json({ message: "Invalid token" });
+      return;
+    }
+
+    res.status(401).json({ message: "Unauthorized" });
   }
 }

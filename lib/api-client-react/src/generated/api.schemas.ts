@@ -37,9 +37,17 @@ export interface AuthResponse {
 
 export interface QuizQuestion {
   question: string;
+  /**
+   * @minItems 4
+   * @maxItems 4
+   */
   options: string[];
+  /**
+   * @minimum 0
+   * @maximum 3
+   */
   correctAnswer: number;
-  explanation?: string;
+  explanation: string;
 }
 
 export type GenerateQuizBodyDifficulty =
@@ -59,27 +67,6 @@ export interface GenerateQuizBody {
    * @maximum 20
    */
   numberOfQuestions: number;
-}
-
-export type GeneratedQuestionCorrectAnswer =
-  (typeof GeneratedQuestionCorrectAnswer)[keyof typeof GeneratedQuestionCorrectAnswer];
-
-export const GeneratedQuestionCorrectAnswer = {
-  A: "A",
-  B: "B",
-  C: "C",
-  D: "D",
-} as const;
-
-export interface GeneratedQuestion {
-  question: string;
-  /**
-   * @minItems 4
-   * @maxItems 4
-   */
-  options: string[];
-  correctAnswer: GeneratedQuestionCorrectAnswer;
-  explanation: string;
 }
 
 export interface CreateQuizBody {
@@ -123,7 +110,7 @@ export interface GenerateFromPdfResponse {
 }
 
 export type GenerateQuiz200 = {
-  questions: GeneratedQuestion[];
+  questions: QuizQuestion[];
 };
 
 export type GenerateQuizFromPdfBodyDifficulty =

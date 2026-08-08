@@ -32,7 +32,7 @@ export default function AuthPage() {
   const registerMutation = useRegister();
   
   const schema = isLogin ? loginSchema : registerSchema;
-  const form = useForm<z.infer<typeof schema>>({
+  const form = useForm<z.infer<typeof registerSchema>>({
     resolver: zodResolver(schema),
     defaultValues: {
       email: "",
@@ -41,7 +41,7 @@ export default function AuthPage() {
     },
   });
 
-  const onSubmit = (data: z.infer<typeof schema>) => {
+  const onSubmit = (data: z.infer<typeof registerSchema>) => {
     if (isLogin) {
       loginMutation.mutate(
         { data: { email: data.email, password: data.password } },

@@ -255,7 +255,7 @@ paths:
                   questions:
                     type: array
                     items:
-                      $ref: "#/components/schemas/GeneratedQuestion"
+                      $ref: "#/components/schemas/QuizQuestion"
                 required:
                   - questions
         "400":
@@ -401,14 +401,19 @@ components:
           type: array
           items:
             type: string
+          minItems: 4
+          maxItems: 4
         correctAnswer:
           type: integer
+          minimum: 0
+          maximum: 3
         explanation:
           type: string
       required:
         - question
         - options
         - correctAnswer
+        - explanation
 
     GenerateQuizBody:
       type: object
@@ -427,27 +432,7 @@ components:
         - difficulty
         - numberOfQuestions
 
-    GeneratedQuestion:
-      type: object
-      properties:
-        question:
-          type: string
-        options:
-          type: array
-          items:
-            type: string
-          minItems: 4
-          maxItems: 4
-        correctAnswer:
-          type: string
-          enum: [A, B, C, D]
-        explanation:
-          type: string
-      required:
-        - question
-        - options
-        - correctAnswer
-        - explanation
+
 
     CreateQuizBody:
       type: object

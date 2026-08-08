@@ -53,7 +53,7 @@ const questionSchema = z.object({
   question: z.string().min(5, "Question must be at least 5 characters"),
   options: z.array(optionSchema).length(4, "Exactly 4 options are required"),
   correctAnswer: z.number().min(0).max(3),
-  explanation: z.string().optional(),
+  explanation: z.string().default(""),
 });
 
 const quizSchema = z.object({
@@ -72,7 +72,6 @@ const difficultyLabels: Record<string, string> = {
   hard: "Hard — deep knowledge & critical thinking",
 };
 
-const correctAnswerIndex: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
 
 export default function QuizSetupPage() {
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
@@ -130,7 +129,7 @@ export default function QuizSetupPage() {
           const generated = res.questions.map((q) => ({
             question: q.question,
             options: q.options as [string, string, string, string],
-            correctAnswer: correctAnswerIndex[q.correctAnswer as string] ?? 0,
+            correctAnswer: q.correctAnswer, // API now returns numeric 0–3 index directly
             explanation: q.explanation,
           }));
           replace(generated);

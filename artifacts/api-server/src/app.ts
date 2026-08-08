@@ -7,6 +7,8 @@ import router from "./routes/index.js";
 import { env } from "./config/env.js";
 import { logger } from "./lib/logger.js";
 import { generalApiLimiter } from "./middlewares/rateLimit.js";
+import { Quiz } from "./models/Quiz.js";
+import { User } from "./models/User.js";
 
 const app: Express = express();
 
@@ -56,9 +58,34 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", generalApiLimiter, router);
 
+const migrateLegacyQuizzes = async () => {
+  try {
+    const unownedCount = await Quiz.countDocuments({
+      $or: [{ createdBy: { $exists: false } }, { createdBy: null }],
+    });
+    if (unownedCount > 0) {
+      const firstUser = await User.findOne();
+      if (firstUser) {
+        await Quiz.updateMany(
+          { $or: [{ createdBy: { $exists: false } }, { createdBy: null }] },
+          { $set: { createdBy: firstUser._id } }
+        );
+        logger.info(`Migrated ${unownedCount} legacy quizzes to user: ${firstUser.username}`);
+      } else {
+        logger.warn(`Found ${unownedCount} legacy quizzes but no users exist to assign ownership to.`);
+      }
+    }
+  } catch (err) {
+    logger.error({ err }, "Error migrating legacy quizzes");
+  }
+};
+
 mongoose
   .connect(env.MONGODB_URI)
-  .then(() => logger.info("Connected to MongoDB"))
+  .then(async () => {
+    logger.info("Connected to MongoDB");
+    await migrateLegacyQuizzes();
+  })
   .catch((err) => logger.error({ err }, "MongoDB connection error"));
 
 export default app;

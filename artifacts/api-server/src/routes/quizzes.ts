@@ -30,7 +30,7 @@ function serializeQuiz(q: QuizDoc) {
 }
 
 router.get("/", async (req: AuthRequest, res: Response) => {
-  const quizzes = await Quiz.find().sort({ createdAt: -1 }).lean<QuizDoc[]>();
+  const quizzes = await Quiz.find({ createdBy: req.userId }).sort({ createdAt: -1 }).lean<QuizDoc[]>();
   res.json(quizzes.map(serializeQuiz));
 });
 
@@ -46,12 +46,62 @@ router.post("/", async (req: AuthRequest, res: Response) => {
 });
 
 router.get("/:id", async (req: AuthRequest, res: Response) => {
-  const quiz = await Quiz.findById(req.params["id"]).lean<QuizDoc>();
+  if (!Types.ObjectId.isValid(req.params["id"] as string)) {
+    res.status(404).json({ message: "Quiz not found" });
+    return;
+  }
+
+  const quiz = await Quiz.findOne({ _id: req.params["id"], createdBy: req.userId }).lean<QuizDoc>();
   if (!quiz) {
     res.status(404).json({ message: "Quiz not found" });
     return;
   }
   res.json(serializeQuiz(quiz));
+});
+
+router.put("/:id", async (req: AuthRequest, res: Response) => {
+  if (!Types.ObjectId.isValid(req.params["id"] as string)) {
+    res.status(404).json({ message: "Quiz not found" });
+    return;
+  }
+
+  const parsed = CreateQuizBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "Validation error", errors: parsed.error.flatten() });
+    return;
+  }
+
+  const quiz = await Quiz.findOneAndUpdate(
+    { _id: req.params["id"], createdBy: req.userId },
+    { $set: parsed.data },
+    { new: true }
+  ).lean<QuizDoc>();
+
+  if (!quiz) {
+    res.status(404).json({ message: "Quiz not found" });
+    return;
+  }
+
+  res.json(serializeQuiz(quiz));
+});
+
+router.delete("/:id", async (req: AuthRequest, res: Response) => {
+  if (!Types.ObjectId.isValid(req.params["id"] as string)) {
+    res.status(404).json({ message: "Quiz not found" });
+    return;
+  }
+
+  const quiz = await Quiz.findOneAndDelete({
+    _id: req.params["id"],
+    createdBy: req.userId,
+  }).lean<QuizDoc>();
+
+  if (!quiz) {
+    res.status(404).json({ message: "Quiz not found" });
+    return;
+  }
+
+  res.json({ message: "Quiz deleted successfully" });
 });
 
 router.post("/:id/submit", async (req: AuthRequest, res: Response) => {
@@ -61,7 +111,12 @@ router.post("/:id/submit", async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const quiz = await Quiz.findById(req.params["id"]).lean<QuizDoc>();
+  if (!Types.ObjectId.isValid(req.params["id"] as string)) {
+    res.status(404).json({ message: "Quiz not found" });
+    return;
+  }
+
+  const quiz = await Quiz.findOne({ _id: req.params["id"], createdBy: req.userId }).lean<QuizDoc>();
   if (!quiz) {
     res.status(404).json({ message: "Quiz not found" });
     return;

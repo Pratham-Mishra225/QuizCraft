@@ -52,6 +52,12 @@ export const GetMeResponse = zod.object({
 /**
  * @summary List all quizzes
  */
+export const getQuizzesResponseQuestionsItemOptionsMin = 4;
+export const getQuizzesResponseQuestionsItemOptionsMax = 4;
+
+export const getQuizzesResponseQuestionsItemCorrectAnswerMin = 0;
+export const getQuizzesResponseQuestionsItemCorrectAnswerMax = 3;
+
 export const GetQuizzesResponseItem = zod.object({
   id: zod.string(),
   title: zod.string(),
@@ -59,9 +65,15 @@ export const GetQuizzesResponseItem = zod.object({
   questions: zod.array(
     zod.object({
       question: zod.string(),
-      options: zod.array(zod.string()),
-      correctAnswer: zod.number(),
-      explanation: zod.string().optional(),
+      options: zod
+        .array(zod.string())
+        .min(getQuizzesResponseQuestionsItemOptionsMin)
+        .max(getQuizzesResponseQuestionsItemOptionsMax),
+      correctAnswer: zod
+        .number()
+        .min(getQuizzesResponseQuestionsItemCorrectAnswerMin)
+        .max(getQuizzesResponseQuestionsItemCorrectAnswerMax),
+      explanation: zod.string(),
     }),
   ),
   createdBy: zod.string(),
@@ -72,15 +84,27 @@ export const GetQuizzesResponse = zod.array(GetQuizzesResponseItem);
 /**
  * @summary Create a quiz
  */
+export const createQuizBodyQuestionsItemOptionsMin = 4;
+export const createQuizBodyQuestionsItemOptionsMax = 4;
+
+export const createQuizBodyQuestionsItemCorrectAnswerMin = 0;
+export const createQuizBodyQuestionsItemCorrectAnswerMax = 3;
+
 export const CreateQuizBody = zod.object({
   title: zod.string(),
   description: zod.string().optional(),
   questions: zod.array(
     zod.object({
       question: zod.string(),
-      options: zod.array(zod.string()),
-      correctAnswer: zod.number(),
-      explanation: zod.string().optional(),
+      options: zod
+        .array(zod.string())
+        .min(createQuizBodyQuestionsItemOptionsMin)
+        .max(createQuizBodyQuestionsItemOptionsMax),
+      correctAnswer: zod
+        .number()
+        .min(createQuizBodyQuestionsItemCorrectAnswerMin)
+        .max(createQuizBodyQuestionsItemCorrectAnswerMax),
+      explanation: zod.string(),
     }),
   ),
 });
@@ -92,6 +116,12 @@ export const GetQuizParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const getQuizResponseQuestionsItemOptionsMin = 4;
+export const getQuizResponseQuestionsItemOptionsMax = 4;
+
+export const getQuizResponseQuestionsItemCorrectAnswerMin = 0;
+export const getQuizResponseQuestionsItemCorrectAnswerMax = 3;
+
 export const GetQuizResponse = zod.object({
   id: zod.string(),
   title: zod.string(),
@@ -99,9 +129,15 @@ export const GetQuizResponse = zod.object({
   questions: zod.array(
     zod.object({
       question: zod.string(),
-      options: zod.array(zod.string()),
-      correctAnswer: zod.number(),
-      explanation: zod.string().optional(),
+      options: zod
+        .array(zod.string())
+        .min(getQuizResponseQuestionsItemOptionsMin)
+        .max(getQuizResponseQuestionsItemOptionsMax),
+      correctAnswer: zod
+        .number()
+        .min(getQuizResponseQuestionsItemCorrectAnswerMin)
+        .max(getQuizResponseQuestionsItemCorrectAnswerMax),
+      explanation: zod.string(),
     }),
   ),
   createdBy: zod.string(),
@@ -184,6 +220,9 @@ export const GenerateQuizBody = zod.object({
 export const generateQuizResponseQuestionsItemOptionsMin = 4;
 export const generateQuizResponseQuestionsItemOptionsMax = 4;
 
+export const generateQuizResponseQuestionsItemCorrectAnswerMin = 0;
+export const generateQuizResponseQuestionsItemCorrectAnswerMax = 3;
+
 export const GenerateQuizResponse = zod.object({
   questions: zod.array(
     zod.object({
@@ -192,7 +231,10 @@ export const GenerateQuizResponse = zod.object({
         .array(zod.string())
         .min(generateQuizResponseQuestionsItemOptionsMin)
         .max(generateQuizResponseQuestionsItemOptionsMax),
-      correctAnswer: zod.enum(["A", "B", "C", "D"]),
+      correctAnswer: zod
+        .number()
+        .min(generateQuizResponseQuestionsItemCorrectAnswerMin)
+        .max(generateQuizResponseQuestionsItemCorrectAnswerMax),
       explanation: zod.string(),
     }),
   ),

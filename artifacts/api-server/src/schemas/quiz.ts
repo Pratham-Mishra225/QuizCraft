@@ -1,5 +1,19 @@
 import { z } from "zod";
 
+export const SourceTypeEnum = z.enum(["manual", "topic-ai", "pdf-ai"]);
+export type SourceType = z.infer<typeof SourceTypeEnum>;
+
+export const VisibilityEnum = z.enum(["private", "public"]);
+export type Visibility = z.infer<typeof VisibilityEnum>;
+
+export const SourceMetadataSchema = z
+  .record(z.string(), z.unknown())
+  .refine((obj) => JSON.stringify(obj).length <= 4096, {
+    message: "sourceMetadata must not exceed 4096 characters when serialized",
+  })
+  .nullable()
+  .optional();
+
 /**
  * Question validation schema for manual creation & updates.
  * Guarantees:
@@ -43,7 +57,7 @@ export const QuestionSchema = z.object({
 export type ValidatedQuestion = z.infer<typeof QuestionSchema>;
 
 /**
- * Schema for creating a new manual quiz.
+ * Schema for creating a new quiz.
  * Strictly whitelists allowed input fields, preventing mass assignment.
  */
 export const CreateQuizSchema = z.object({
@@ -61,6 +75,9 @@ export const CreateQuizSchema = z.object({
     .array(QuestionSchema)
     .min(1, "Quiz must contain at least 1 question")
     .max(100, "Quiz cannot contain more than 100 questions"),
+  sourceType: SourceTypeEnum.optional().default("manual"),
+  sourceMetadata: SourceMetadataSchema.default(null),
+  visibility: VisibilityEnum.optional().default("private"),
 });
 
 export type CreateQuizInput = z.infer<typeof CreateQuizSchema>;
@@ -68,7 +85,27 @@ export type CreateQuizInput = z.infer<typeof CreateQuizSchema>;
 /**
  * Schema for updating an existing quiz.
  */
-export const UpdateQuizSchema = CreateQuizSchema;
+export const UpdateQuizSchema = z.object({
+  title: z
+    .string({ required_error: "Quiz title is required" })
+    .trim()
+    .min(1, "Quiz title cannot be empty")
+    .max(200, "Quiz title must not exceed 200 characters"),
+  description: z
+    .string()
+    .max(2000, "Description must not exceed 2000 characters")
+    .optional()
+    .default(""),
+  questions: z
+    .array(QuestionSchema)
+    .min(1, "Quiz must contain at least 1 question")
+    .max(100, "Quiz cannot contain more than 100 questions"),
+  sourceType: SourceTypeEnum.optional(),
+  sourceMetadata: SourceMetadataSchema,
+  visibility: VisibilityEnum.optional(),
+});
+
+export type UpdateQuizInput = z.infer<typeof UpdateQuizSchema>;
 
 /**
  * Answer item schema in a quiz submission.
@@ -97,3 +134,16 @@ export const SubmitQuizSchema = z.object({
 });
 
 export type SubmitQuizInput = z.infer<typeof SubmitQuizSchema>;
+
+/**
+ * Schema for historical question snapshot in an Attempt.
+ */
+export const QuestionSnapshotSchema = z.object({
+  questionIndex: z.number().int().min(0),
+  question: z.string().min(1),
+  options: z.array(z.string()).length(4),
+  correctAnswer: z.number().int().min(0).max(3),
+  explanation: z.string().optional().default(""),
+});
+
+export type QuestionSnapshot = z.infer<typeof QuestionSnapshotSchema>;

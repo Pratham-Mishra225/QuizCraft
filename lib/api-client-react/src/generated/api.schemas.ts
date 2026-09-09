@@ -31,6 +31,7 @@ export interface User {
 }
 
 export interface AuthResponse {
+  token: string;
   user: User;
 }
 
@@ -68,11 +69,52 @@ export interface GenerateQuizBody {
   numberOfQuestions: number;
 }
 
+export type CreateQuizBodySourceType =
+  (typeof CreateQuizBodySourceType)[keyof typeof CreateQuizBodySourceType];
+
+export const CreateQuizBodySourceType = {
+  manual: "manual",
+  "topic-ai": "topic-ai",
+  "pdf-ai": "pdf-ai",
+} as const;
+
+export type CreateQuizBodySourceMetadata = { [key: string]: unknown } | null;
+
+export type CreateQuizBodyVisibility =
+  (typeof CreateQuizBodyVisibility)[keyof typeof CreateQuizBodyVisibility];
+
+export const CreateQuizBodyVisibility = {
+  private: "private",
+  public: "public",
+} as const;
+
 export interface CreateQuizBody {
   title: string;
   description?: string;
   questions: QuizQuestion[];
+  sourceType?: CreateQuizBodySourceType;
+  sourceMetadata?: CreateQuizBodySourceMetadata;
+  visibility?: CreateQuizBodyVisibility;
 }
+
+export type QuizSourceType =
+  (typeof QuizSourceType)[keyof typeof QuizSourceType];
+
+export const QuizSourceType = {
+  manual: "manual",
+  "topic-ai": "topic-ai",
+  "pdf-ai": "pdf-ai",
+} as const;
+
+export type QuizSourceMetadata = { [key: string]: unknown } | null;
+
+export type QuizVisibility =
+  (typeof QuizVisibility)[keyof typeof QuizVisibility];
+
+export const QuizVisibility = {
+  private: "private",
+  public: "public",
+} as const;
 
 export interface Quiz {
   id: string;
@@ -80,12 +122,32 @@ export interface Quiz {
   description?: string;
   questions: QuizQuestion[];
   createdBy: string;
+  sourceType: QuizSourceType;
+  sourceMetadata?: QuizSourceMetadata;
+  visibility: QuizVisibility;
   createdAt: string;
+}
+
+export interface QuestionSnapshot {
+  questionIndex: number;
+  question: string;
+  /**
+   * @minItems 4
+   * @maxItems 4
+   */
+  options: string[];
+  /**
+   * @minimum 0
+   * @maximum 3
+   */
+  correctAnswer: number;
+  explanation: string;
 }
 
 export interface AnswerItem {
   questionIndex: number;
   selectedOption: number;
+  isCorrect?: boolean;
 }
 
 export interface SubmitQuizBody {
@@ -97,6 +159,7 @@ export interface Attempt {
   quizId: string;
   quizTitle: string;
   userId: string;
+  questionSnapshot?: QuestionSnapshot[];
   answers: AnswerItem[];
   score: number;
   totalQuestions: number;

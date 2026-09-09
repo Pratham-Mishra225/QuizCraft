@@ -77,6 +77,9 @@ export const GetQuizzesResponseItem = zod.object({
     }),
   ),
   createdBy: zod.string(),
+  sourceType: zod.enum(["manual", "topic-ai", "pdf-ai"]),
+  sourceMetadata: zod.object({}).passthrough().nullish(),
+  visibility: zod.enum(["private", "public"]),
   createdAt: zod.string(),
 });
 export const GetQuizzesResponse = zod.array(GetQuizzesResponseItem);
@@ -89,6 +92,9 @@ export const createQuizBodyQuestionsItemOptionsMax = 4;
 
 export const createQuizBodyQuestionsItemCorrectAnswerMin = 0;
 export const createQuizBodyQuestionsItemCorrectAnswerMax = 3;
+
+export const createQuizBodySourceTypeDefault = `manual`;
+export const createQuizBodyVisibilityDefault = `private`;
 
 export const CreateQuizBody = zod.object({
   title: zod.string(),
@@ -107,6 +113,13 @@ export const CreateQuizBody = zod.object({
       explanation: zod.string(),
     }),
   ),
+  sourceType: zod
+    .enum(["manual", "topic-ai", "pdf-ai"])
+    .default(createQuizBodySourceTypeDefault),
+  sourceMetadata: zod.object({}).passthrough().nullish(),
+  visibility: zod
+    .enum(["private", "public"])
+    .default(createQuizBodyVisibilityDefault),
 });
 
 /**
@@ -141,6 +154,9 @@ export const GetQuizResponse = zod.object({
     }),
   ),
   createdBy: zod.string(),
+  sourceType: zod.enum(["manual", "topic-ai", "pdf-ai"]),
+  sourceMetadata: zod.object({}).passthrough().nullish(),
+  visibility: zod.enum(["private", "public"]),
   createdAt: zod.string(),
 });
 
@@ -156,6 +172,7 @@ export const SubmitQuizBody = zod.object({
     zod.object({
       questionIndex: zod.number(),
       selectedOption: zod.number(),
+      isCorrect: zod.boolean().optional(),
     }),
   ),
 });
@@ -163,15 +180,39 @@ export const SubmitQuizBody = zod.object({
 /**
  * @summary Get current user's quiz attempts
  */
+export const getAttemptsResponseQuestionSnapshotItemOptionsMin = 4;
+export const getAttemptsResponseQuestionSnapshotItemOptionsMax = 4;
+
+export const getAttemptsResponseQuestionSnapshotItemCorrectAnswerMin = 0;
+export const getAttemptsResponseQuestionSnapshotItemCorrectAnswerMax = 3;
+
 export const GetAttemptsResponseItem = zod.object({
   id: zod.string(),
   quizId: zod.string(),
   quizTitle: zod.string(),
   userId: zod.string(),
+  questionSnapshot: zod
+    .array(
+      zod.object({
+        questionIndex: zod.number(),
+        question: zod.string(),
+        options: zod
+          .array(zod.string())
+          .min(getAttemptsResponseQuestionSnapshotItemOptionsMin)
+          .max(getAttemptsResponseQuestionSnapshotItemOptionsMax),
+        correctAnswer: zod
+          .number()
+          .min(getAttemptsResponseQuestionSnapshotItemCorrectAnswerMin)
+          .max(getAttemptsResponseQuestionSnapshotItemCorrectAnswerMax),
+        explanation: zod.string(),
+      }),
+    )
+    .optional(),
   answers: zod.array(
     zod.object({
       questionIndex: zod.number(),
       selectedOption: zod.number(),
+      isCorrect: zod.boolean().optional(),
     }),
   ),
   score: zod.number(),
@@ -187,15 +228,39 @@ export const GetAttemptParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const getAttemptResponseQuestionSnapshotItemOptionsMin = 4;
+export const getAttemptResponseQuestionSnapshotItemOptionsMax = 4;
+
+export const getAttemptResponseQuestionSnapshotItemCorrectAnswerMin = 0;
+export const getAttemptResponseQuestionSnapshotItemCorrectAnswerMax = 3;
+
 export const GetAttemptResponse = zod.object({
   id: zod.string(),
   quizId: zod.string(),
   quizTitle: zod.string(),
   userId: zod.string(),
+  questionSnapshot: zod
+    .array(
+      zod.object({
+        questionIndex: zod.number(),
+        question: zod.string(),
+        options: zod
+          .array(zod.string())
+          .min(getAttemptResponseQuestionSnapshotItemOptionsMin)
+          .max(getAttemptResponseQuestionSnapshotItemOptionsMax),
+        correctAnswer: zod
+          .number()
+          .min(getAttemptResponseQuestionSnapshotItemCorrectAnswerMin)
+          .max(getAttemptResponseQuestionSnapshotItemCorrectAnswerMax),
+        explanation: zod.string(),
+      }),
+    )
+    .optional(),
   answers: zod.array(
     zod.object({
       questionIndex: zod.number(),
       selectedOption: zod.number(),
+      isCorrect: zod.boolean().optional(),
     }),
   ),
   score: zod.number(),

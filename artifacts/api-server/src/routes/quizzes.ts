@@ -19,6 +19,9 @@ type QuizDoc = {
   description?: string;
   questions: { question: string; options: string[]; correctAnswer: number; explanation?: string }[];
   createdBy: Types.ObjectId;
+  sourceType?: string;
+  sourceMetadata?: Record<string, unknown> | null;
+  visibility?: string;
   createdAt: Date;
 };
 
@@ -29,6 +32,9 @@ function serializeQuiz(q: QuizDoc) {
     description: q.description ?? "",
     questions: q.questions,
     createdBy: String(q.createdBy),
+    sourceType: q.sourceType ?? "manual",
+    sourceMetadata: q.sourceMetadata ?? null,
+    visibility: q.visibility ?? "private",
     createdAt: q.createdAt ? q.createdAt.toISOString() : new Date().toISOString(),
   };
 }
@@ -51,14 +57,16 @@ router.post("/", async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const { title, description, questions } = parsed.data;
+  const { title, description, questions, sourceType, sourceMetadata, visibility } = parsed.data;
 
   const quiz = await Quiz.create({
     title,
     description,
     questions,
     createdBy: req.userId,
-    quizType: "manual",
+    sourceType: sourceType ?? "manual",
+    sourceMetadata: sourceMetadata ?? null,
+    visibility: visibility ?? "private",
   });
 
   res.status(201).json(serializeQuiz(quiz.toObject() as QuizDoc));
@@ -96,11 +104,16 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const { title, description, questions } = parsed.data;
+  const { title, description, questions, sourceType, sourceMetadata, visibility } = parsed.data;
+
+  const updateFields: Record<string, unknown> = { title, description, questions };
+  if (sourceType !== undefined) updateFields["sourceType"] = sourceType;
+  if (sourceMetadata !== undefined) updateFields["sourceMetadata"] = sourceMetadata;
+  if (visibility !== undefined) updateFields["visibility"] = visibility;
 
   const quiz = await Quiz.findOneAndUpdate(
     { _id: id, createdBy: req.userId },
-    { $set: { title, description, questions } },
+    { $set: updateFields },
     { returnDocument: "after" }
   ).lean<QuizDoc>();
 
@@ -113,7 +126,7 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
 });
 
 // ─── DELETE /api/quizzes/:id ─────────────────────────────────────────────────
-// Delete an existing quiz (strictly owner-scoped)
+// Delete an existing quiz (strictly owner-scoped). Does NOT cascade delete attempts.
 router.delete("/:id", async (req: AuthRequest, res: Response) => {
   const id = req.params["id"] as string;
   if (!Types.ObjectId.isValid(id)) {
@@ -135,7 +148,7 @@ router.delete("/:id", async (req: AuthRequest, res: Response) => {
 });
 
 // ─── POST /api/quizzes/:id/submit ────────────────────────────────────────────
-// Submit answers for scoring (hardened validation & server-authoritative scoring)
+// Submit answers for scoring (server-authoritative scoring & immutable historical snapshot)
 router.post("/:id/submit", async (req: AuthRequest, res: Response) => {
   const id = req.params["id"] as string;
   if (!Types.ObjectId.isValid(id)) {
@@ -201,26 +214,38 @@ router.post("/:id/submit", async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  // 3. Server-authoritative scoring: client-supplied score/totals are never trusted
+  // 3. Server-authoritative scoring & snapshot generation:
+  // Client-supplied score, isCorrect, questionSnapshot, quizTitle are never trusted
   let score = 0;
-  for (const answer of answers) {
+  const evaluatedAnswers = answers.map((answer) => {
     const question = quiz.questions[answer.questionIndex];
-    if (question && question.correctAnswer === answer.selectedOption) {
+    const isCorrect = Boolean(question && question.correctAnswer === answer.selectedOption);
+    if (isCorrect) {
       score++;
     }
-  }
+    return {
+      questionIndex: answer.questionIndex,
+      selectedOption: answer.selectedOption,
+      isCorrect,
+    };
+  });
 
-  // 4. Persist attempt scoped to authenticated user
-  const sanitizedAnswers = answers.map((a) => ({
-    questionIndex: a.questionIndex,
-    selectedOption: a.selectedOption,
+  // Create immutable historical question snapshot at submission time
+  const questionSnapshot = quiz.questions.map((q, idx) => ({
+    questionIndex: idx,
+    question: q.question,
+    options: [...q.options],
+    correctAnswer: q.correctAnswer,
+    explanation: q.explanation ?? "",
   }));
 
+  // 4. Persist attempt scoped to authenticated user
   const attempt = await Attempt.create({
     quizId: quiz._id,
     quizTitle: quiz.title,
     userId: req.userId,
-    answers: sanitizedAnswers,
+    questionSnapshot,
+    answers: evaluatedAnswers,
     score,
     totalQuestions,
     completedAt: new Date(),
@@ -231,6 +256,7 @@ router.post("/:id/submit", async (req: AuthRequest, res: Response) => {
     quizId: String(attempt.quizId),
     quizTitle: attempt.quizTitle,
     userId: String(attempt.userId),
+    questionSnapshot: attempt.questionSnapshot,
     answers: attempt.answers,
     score: attempt.score,
     totalQuestions: attempt.totalQuestions,

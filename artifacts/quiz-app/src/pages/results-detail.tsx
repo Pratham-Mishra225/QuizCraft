@@ -1,11 +1,13 @@
 import { Link, useLocation, useParams } from "wouter";
 import { useGetAttempt, getGetAttemptQueryKey } from "@workspace/api-client-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Layout } from "@/components/layout";
 import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
-import { ArrowLeft, CheckCircle, XCircle, Loader2, Trophy, Calendar } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, Loader2, Trophy, Calendar, Info } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export default function ResultsDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -60,6 +62,9 @@ export default function ResultsDetailPage() {
   }
 
   const percent = Math.round((attempt.score / attempt.totalQuestions) * 100);
+  const snapshots = attempt.questionSnapshot && attempt.questionSnapshot.length > 0
+    ? [...attempt.questionSnapshot].sort((a, b) => a.questionIndex - b.questionIndex)
+    : [];
 
   return (
     <Layout>
@@ -129,28 +134,121 @@ export default function ResultsDetailPage() {
           </CardFooter>
         </Card>
 
-        <h2 className="text-xl font-semibold tracking-tight mb-6">Answer Summary</h2>
-        <div className="grid gap-4">
-          {attempt.answers.map((answer, i) => (
-            <Card key={i} className="border hover-elevate transition-all">
-              <CardHeader className="pb-3 bg-muted/5">
-                <CardTitle className="text-lg font-medium flex items-start gap-3">
-                  <span className="mt-0.5 min-w-[24px] text-muted-foreground text-sm">#{i + 1}</span>
-                  Question {answer.questionIndex + 1} details are hidden in attempt model, but user answered option {answer.selectedOption + 1}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <div className="flex items-center gap-2">
-                  <div className="text-sm px-3 py-1.5 rounded-md bg-muted/50 border border-border/50 w-full flex items-center">
-                    <span className="font-medium mr-2">Selected:</span>
-                    Option {answer.selectedOption + 1}
+        <h2 className="text-xl font-semibold tracking-tight mb-6">Question & Answer Review</h2>
+        <div className="grid gap-6">
+          {snapshots.length > 0 ? (
+            snapshots.map((snap, i) => {
+              const userAnswer = attempt.answers.find((a) => a.questionIndex === snap.questionIndex);
+              const selectedOption = userAnswer?.selectedOption;
+              const isCorrect = userAnswer
+                ? (userAnswer.isCorrect ?? selectedOption === snap.correctAnswer)
+                : false;
+
+              return (
+                <Card key={i} className="border-2 overflow-hidden hover-elevate transition-all">
+                  <CardHeader className="pb-4 bg-muted/20 border-b flex flex-row items-start justify-between gap-4">
+                    <CardTitle className="text-lg font-medium flex items-start gap-3">
+                      <span className="mt-0.5 min-w-[28px] text-muted-foreground text-sm font-semibold">
+                        #{i + 1}
+                      </span>
+                      <span>{snap.question}</span>
+                    </CardTitle>
+                    {isCorrect ? (
+                      <Badge className="bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300 border-green-300 dark:border-green-800 flex items-center gap-1 shrink-0">
+                        <CheckCircle className="size-3.5" /> Correct
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive" className="flex items-center gap-1 shrink-0">
+                        <XCircle className="size-3.5" /> Incorrect
+                      </Badge>
+                    )}
+                  </CardHeader>
+
+                  <CardContent className="pt-4 space-y-3">
+                    <div className="grid gap-2">
+                      {snap.options.map((opt, optIdx) => {
+                        const isSelected = selectedOption === optIdx;
+                        const isThisCorrect = snap.correctAnswer === optIdx;
+
+                        let style = "border-muted/60 bg-muted/10 text-muted-foreground";
+                        let badgeLabel: string | null = null;
+
+                        if (isSelected && isThisCorrect) {
+                          style = "border-green-500 bg-green-50 dark:bg-green-950/40 text-green-900 dark:text-green-100 font-medium";
+                          badgeLabel = "Your Answer (Correct)";
+                        } else if (isSelected && !isThisCorrect) {
+                          style = "border-red-400 bg-red-50 dark:bg-red-950/40 text-red-900 dark:text-red-100 font-medium";
+                          badgeLabel = "Your Answer";
+                        } else if (isThisCorrect) {
+                          style = "border-green-400/80 bg-green-50/50 dark:bg-green-950/20 text-green-800 dark:text-green-200 font-medium";
+                          badgeLabel = "Correct Answer";
+                        }
+
+                        return (
+                          <div
+                            key={optIdx}
+                            className={cn(
+                              "flex items-center justify-between p-3 rounded-lg border text-sm transition-colors",
+                              style
+                            )}
+                          >
+                            <span className="flex items-center gap-3">
+                              <span className="w-6 h-6 rounded-full border border-current flex items-center justify-center text-xs font-bold shrink-0">
+                                {String.fromCharCode(65 + optIdx)}
+                              </span>
+                              <span>{opt}</span>
+                            </span>
+                            {badgeLabel && (
+                              <span className="text-xs px-2 py-0.5 rounded font-semibold shrink-0">
+                                {badgeLabel}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {snap.explanation && (
+                      <div className="mt-4 p-3.5 rounded-lg bg-muted/40 border text-sm text-muted-foreground flex gap-2.5">
+                        <Info className="size-4 text-primary shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-semibold text-foreground">Explanation: </span>
+                          <span>{snap.explanation}</span>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })
+          ) : (
+            attempt.answers.map((answer, i) => (
+              <Card key={i} className="border hover-elevate transition-all">
+                <CardHeader className="pb-3 bg-muted/5">
+                  <CardTitle className="text-lg font-medium flex items-start gap-3">
+                    <span className="mt-0.5 min-w-[24px] text-muted-foreground text-sm">#{i + 1}</span>
+                    Question {answer.questionIndex + 1}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm px-3 py-1.5 rounded-md bg-muted/50 border border-border/50 w-full flex items-center justify-between">
+                      <span>Selected Option: <strong>{String.fromCharCode(65 + answer.selectedOption)}</strong> (Option {answer.selectedOption + 1})</span>
+                      {answer.isCorrect !== undefined && (
+                        answer.isCorrect ? (
+                          <Badge className="bg-green-100 text-green-800">Correct</Badge>
+                        ) : (
+                          <Badge variant="destructive">Incorrect</Badge>
+                        )
+                      )}
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            ))
+          )}
         </div>
       </div>
     </Layout>
   );
-}
+}

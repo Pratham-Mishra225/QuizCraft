@@ -20,6 +20,7 @@ router.get("/", async (req: AuthRequest, res: Response) => {
       quizId: String(a.quizId),
       quizTitle: a.quizTitle,
       userId: String(a.userId),
+      questionSnapshot: a.questionSnapshot ?? [],
       answers: a.answers,
       score: a.score,
       totalQuestions: a.totalQuestions,
@@ -33,6 +34,7 @@ router.get("/", async (req: AuthRequest, res: Response) => {
 
 // ─── GET /api/attempts/:id ───────────────────────────────────────────────────
 // Retrieve a single attempt by ID (strictly owner-scoped to prevent IDOR)
+// Driven entirely by Attempt data (independent of Quiz existence)
 router.get("/:id", async (req: AuthRequest, res: Response) => {
   const id = req.params["id"] as string;
   if (!Types.ObjectId.isValid(id)) {
@@ -55,6 +57,7 @@ router.get("/:id", async (req: AuthRequest, res: Response) => {
     quizId: String(attempt.quizId),
     quizTitle: attempt.quizTitle,
     userId: String(attempt.userId),
+    questionSnapshot: attempt.questionSnapshot ?? [],
     answers: attempt.answers,
     score: attempt.score,
     totalQuestions: attempt.totalQuestions,

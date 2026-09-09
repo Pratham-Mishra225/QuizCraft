@@ -7,13 +7,17 @@ export interface IQuestion {
   explanation?: string;
 }
 
+export type QuizSourceType = "manual" | "topic-ai" | "pdf-ai";
+export type QuizVisibility = "private" | "public";
+
 export interface IQuiz extends Document {
   title: string;
   description?: string;
   questions: IQuestion[];
   createdBy: Types.ObjectId;
-  quizType?: string;
-  sourceFileName?: string;
+  sourceType: QuizSourceType;
+  sourceMetadata?: Record<string, unknown> | null;
+  visibility: QuizVisibility;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,10 +38,27 @@ const QuizSchema = new Schema<IQuiz>(
     description: { type: String, default: "" },
     questions: { type: [QuestionSchema], required: true },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    quizType: { type: String, default: "manual" },
-    sourceFileName: { type: String, default: "" },
+    sourceType: {
+      type: String,
+      enum: ["manual", "topic-ai", "pdf-ai"],
+      default: "manual",
+      required: true,
+    },
+    sourceMetadata: {
+      type: Schema.Types.Mixed,
+      default: null,
+    },
+    visibility: {
+      type: String,
+      enum: ["private", "public"],
+      default: "private",
+      required: true,
+    },
   },
   { timestamps: true }
 );
+
+// Query index: find quizzes by creator sorted by newest first
+QuizSchema.index({ createdBy: 1, createdAt: -1 });
 
 export const Quiz = mongoose.model<IQuiz>("Quiz", QuizSchema);

@@ -149,7 +149,7 @@ Full spec: lib/api-spec/openapi.yaml
 
 ## Auth and Storage
 
-- JWT access token stored in localStorage under quiz_token
+- JWT access token stored in secure, HttpOnly, SameSite=Lax cookie (`auth_token`)
 - Auth middleware protects quiz and attempt endpoints
 
 ## Rate Limits

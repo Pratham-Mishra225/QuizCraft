@@ -1,9 +1,10 @@
 import { createRoot } from "react-dom/client";
-import { setAuthTokenGetter } from "@workspace/api-client-react";
 import App from "./App";
 import "./index.css";
 
-setAuthTokenGetter(() => localStorage.getItem("quiz_token"));
+// Auth is now handled via HttpOnly cookie set by the server.
+// The browser automatically attaches the cookie on every request
+// (custom-fetch.ts uses credentials: "include").
+// No client-side token management is needed.
 
 createRoot(document.getElementById("root")!).render(<App />);
-

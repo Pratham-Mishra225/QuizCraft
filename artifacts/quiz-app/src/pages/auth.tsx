@@ -47,7 +47,7 @@ export default function AuthPage() {
         { data: { email: data.email, password: data.password } },
         {
           onSuccess: (res) => {
-            localStorage.setItem("quiz_token", res.token);
+            // Cookie is set by the server — no localStorage needed.
             queryClient.setQueryData(getGetMeQueryKey(), res.user);
             toast({
               title: "Welcome back!",
@@ -69,7 +69,7 @@ export default function AuthPage() {
         { data: data as z.infer<typeof registerSchema> },
         {
           onSuccess: (res) => {
-            localStorage.setItem("quiz_token", res.token);
+            // Cookie is set by the server — no localStorage needed.
             queryClient.setQueryData(getGetMeQueryKey(), res.user);
             toast({
               title: "Account created!",

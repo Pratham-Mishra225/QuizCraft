@@ -1,4 +1,5 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
+import cookieParser from "cookie-parser";
 import cors, { type CorsOptions } from "cors";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
@@ -29,6 +30,9 @@ const corsOptions: CorsOptions = {
     const normalizedOrigin = origin.replace(/\/+$/, "");
     callback(null, allowedOrigins.has(normalizedOrigin));
   },
+  // Required for cookie-based auth when frontend/backend are cross-origin (e.g. dev).
+  // Without this, browsers will not attach the HttpOnly auth_token cookie.
+  credentials: true,
 };
 
 // ── Middleware stack ──────────────────────────────────────────────────────────
@@ -53,6 +57,8 @@ app.use(
 );
 app.use(helmet());
 app.use(cors(corsOptions));
+// Parse cookies so req.cookies.auth_token is available in auth middleware
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

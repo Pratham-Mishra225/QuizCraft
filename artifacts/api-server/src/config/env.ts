@@ -36,6 +36,11 @@ const envSchema = z.object({
     required_error: "NODE_ENV is required",
   }),
   LOG_LEVEL: z.string().optional(),
+  /**
+   * JWT expiry AND cookie Max-Age, expressed as a vercel/ms string (e.g. "7d", "1h").
+   * Both the token and the cookie use this value so they are always in sync.
+   */
+  AUTH_TOKEN_TTL: z.string().optional().default("7d"),
 });
 
 const parsed = envSchema.safeParse(process.env);

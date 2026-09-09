@@ -163,12 +163,6 @@ export default function QuizSetupPage() {
       return;
     }
 
-    const token = localStorage.getItem("quiz_token");
-    if (!token) {
-      toast({ variant: "destructive", title: "Not authenticated", description: "Please log in again." });
-      return;
-    }
-
     setIsPdfGenerating(true);
 
     try {
@@ -177,9 +171,11 @@ export default function QuizSetupPage() {
       formData.append("difficulty", pdfDifficulty);
       formData.append("numberOfQuestions", String(pdfCount));
 
+      // credentials: "include" sends the HttpOnly auth_token cookie automatically.
+      // No manual Authorization header needed.
       const res = await fetch("/api/quiz/generate-from-pdf", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
         body: formData,
       });
 
@@ -207,6 +203,7 @@ export default function QuizSetupPage() {
       setIsPdfGenerating(false);
     }
   };
+
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

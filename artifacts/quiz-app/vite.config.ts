@@ -28,6 +28,17 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      onwarn(warning, warn) {
+        // Suppress "Can't resolve original location of error" sourcemap warnings.
+        // These come from Radix UI / shadcn components that include "use client"
+        // directives (a Next.js convention). They have no runtime impact —
+        // the compiled JS is correct. Rollup simply cannot map the "use client"
+        // line back to a source position because it has no meaning in a Vite build.
+        if (warning.code === "SOURCEMAP_ERROR") return;
+        warn(warning);
+      },
+    },
   },
   server: {
     port,
@@ -51,3 +62,4 @@ export default defineConfig({
     allowedHosts: true,
   },
 });
+

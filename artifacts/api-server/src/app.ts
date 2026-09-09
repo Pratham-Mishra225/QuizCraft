@@ -1,14 +1,13 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors, { type CorsOptions } from "cors";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
-import mongoose from "mongoose";
 import router from "./routes/index.js";
 import { env } from "./config/env.js";
 import { logger } from "./lib/logger.js";
 import { generalApiLimiter } from "./middlewares/rateLimit.js";
-import { Quiz } from "./models/Quiz.js";
-import { User } from "./models/User.js";
+import { errorHandler } from "./middlewares/error-handler.js";
+import { ErrorCode } from "./lib/errors.js";
 
 const app: Express = express();
 
@@ -32,6 +31,7 @@ const corsOptions: CorsOptions = {
   },
 };
 
+// ── Middleware stack ──────────────────────────────────────────────────────────
 app.use(
   pinoHttp({
     logger,
@@ -56,36 +56,21 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// ── API routes ────────────────────────────────────────────────────────────────
 app.use("/api", generalApiLimiter, router);
 
-const migrateLegacyQuizzes = async () => {
-  try {
-    const unownedCount = await Quiz.countDocuments({
-      $or: [{ createdBy: { $exists: false } }, { createdBy: null }],
-    });
-    if (unownedCount > 0) {
-      const firstUser = await User.findOne();
-      if (firstUser) {
-        await Quiz.updateMany(
-          { $or: [{ createdBy: { $exists: false } }, { createdBy: null }] },
-          { $set: { createdBy: firstUser._id } }
-        );
-        logger.info(`Migrated ${unownedCount} legacy quizzes to user: ${firstUser.username}`);
-      } else {
-        logger.warn(`Found ${unownedCount} legacy quizzes but no users exist to assign ownership to.`);
-      }
-    }
-  } catch (err) {
-    logger.error({ err }, "Error migrating legacy quizzes");
-  }
-};
+// ── API 404 — must come after routes, before error handler ───────────────────
+// Only matches /api/* paths so the SPA frontend fallback is unaffected.
+app.use("/api", (_req: Request, res: Response, _next: NextFunction) => {
+  res.status(404).json({
+    error: {
+      code: ErrorCode.NOT_FOUND,
+      message: "Route not found.",
+    },
+  });
+});
 
-mongoose
-  .connect(env.MONGODB_URI)
-  .then(async () => {
-    logger.info("Connected to MongoDB");
-    await migrateLegacyQuizzes();
-  })
-  .catch((err) => logger.error({ err }, "MongoDB connection error"));
+// ── Centralized error handler — must be last ──────────────────────────────────
+app.use(errorHandler);
 
 export default app;

@@ -1,11 +1,14 @@
 import { Router, Response } from "express";
 import { Attempt } from "../models/Attempt.js";
 import { requireAuth, AuthRequest } from "../middlewares/auth.js";
+import { Types } from "mongoose";
 
 const router = Router();
 
 router.use(requireAuth);
 
+// ─── GET /api/attempts ───────────────────────────────────────────────────────
+// List all quiz attempts for the authenticated user only
 router.get("/", async (req: AuthRequest, res: Response) => {
   const attempts = await Attempt.find({ userId: req.userId })
     .sort({ completedAt: -1 })
@@ -20,14 +23,25 @@ router.get("/", async (req: AuthRequest, res: Response) => {
       answers: a.answers,
       score: a.score,
       totalQuestions: a.totalQuestions,
-      completedAt: a.completedAt instanceof Date ? a.completedAt.toISOString() : String(a.completedAt),
+      completedAt:
+        a.completedAt instanceof Date
+          ? a.completedAt.toISOString()
+          : String(a.completedAt),
     }))
   );
 });
 
+// ─── GET /api/attempts/:id ───────────────────────────────────────────────────
+// Retrieve a single attempt by ID (strictly owner-scoped to prevent IDOR)
 router.get("/:id", async (req: AuthRequest, res: Response) => {
+  const id = req.params["id"] as string;
+  if (!Types.ObjectId.isValid(id)) {
+    res.status(404).json({ message: "Attempt not found" });
+    return;
+  }
+
   const attempt = await Attempt.findOne({
-    _id: req.params["id"],
+    _id: id,
     userId: req.userId,
   }).lean();
 
@@ -44,7 +58,10 @@ router.get("/:id", async (req: AuthRequest, res: Response) => {
     answers: attempt.answers,
     score: attempt.score,
     totalQuestions: attempt.totalQuestions,
-    completedAt: attempt.completedAt instanceof Date ? attempt.completedAt.toISOString() : String(attempt.completedAt),
+    completedAt:
+      attempt.completedAt instanceof Date
+        ? attempt.completedAt.toISOString()
+        : String(attempt.completedAt),
   });
 });
 

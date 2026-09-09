@@ -9,12 +9,15 @@ function tooManyRequestsHandler(_req: Request, res: Response): void {
   res.status(429).json(rateLimitResponse);
 }
 
+const isTest = process.env.NODE_ENV === "test";
+
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   handler: tooManyRequestsHandler,
+  skip: () => isTest,
 });
 
 export const aiLimiter = rateLimit({
@@ -23,6 +26,7 @@ export const aiLimiter = rateLimit({
   standardHeaders: "draft-7",
   legacyHeaders: false,
   handler: tooManyRequestsHandler,
+  skip: () => isTest,
 });
 
 export const pdfAiLimiter = rateLimit({
@@ -31,6 +35,7 @@ export const pdfAiLimiter = rateLimit({
   standardHeaders: "draft-7",
   legacyHeaders: false,
   handler: tooManyRequestsHandler,
+  skip: () => isTest,
 });
 
 export const generalApiLimiter = rateLimit({
@@ -39,5 +44,5 @@ export const generalApiLimiter = rateLimit({
   standardHeaders: "draft-7",
   legacyHeaders: false,
   handler: tooManyRequestsHandler,
-  skip: (req) => req.path === "/healthz" || req.path === "/readyz",
+  skip: (req) => isTest || req.path === "/healthz" || req.path === "/readyz",
 });

@@ -30,6 +30,7 @@ import type {
   Quiz,
   RegisterBody,
   SubmitQuizBody,
+  UpdateQuizVisibilityBody,
   User,
 } from "./api.schemas";
 
@@ -512,6 +513,93 @@ export const useCreateQuiz = <
 };
 
 /**
+ * @summary Get a public quiz by share ID
+ */
+export const getGetPublicQuizUrl = (shareId: string) => {
+  return `/api/public/quizzes/${shareId}`;
+};
+
+export const getPublicQuiz = async (
+  shareId: string,
+  options?: RequestInit,
+): Promise<Quiz> => {
+  return customFetch<Quiz>(getGetPublicQuizUrl(shareId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPublicQuizQueryKey = (shareId: string) => {
+  return [`/api/public/quizzes/${shareId}`] as const;
+};
+
+export const getGetPublicQuizQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPublicQuiz>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  shareId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPublicQuiz>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPublicQuizQueryKey(shareId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicQuiz>>> = ({
+    signal,
+  }) => getPublicQuiz(shareId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!shareId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPublicQuiz>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPublicQuizQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPublicQuiz>>
+>;
+export type GetPublicQuizQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get a public quiz by share ID
+ */
+
+export function useGetPublicQuiz<
+  TData = Awaited<ReturnType<typeof getPublicQuiz>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  shareId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPublicQuiz>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPublicQuizQueryOptions(shareId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Get a quiz by ID
  */
 export const getGetQuizUrl = (id: string) => {
@@ -587,6 +675,94 @@ export function useGetQuiz<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Update quiz visibility (private or public)
+ */
+export const getUpdateQuizVisibilityUrl = (id: string) => {
+  return `/api/quizzes/${id}/visibility`;
+};
+
+export const updateQuizVisibility = async (
+  id: string,
+  updateQuizVisibilityBody: UpdateQuizVisibilityBody,
+  options?: RequestInit,
+): Promise<Quiz> => {
+  return customFetch<Quiz>(getUpdateQuizVisibilityUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateQuizVisibilityBody),
+  });
+};
+
+export const getUpdateQuizVisibilityMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateQuizVisibility>>,
+    TError,
+    { id: string; data: BodyType<UpdateQuizVisibilityBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateQuizVisibility>>,
+  TError,
+  { id: string; data: BodyType<UpdateQuizVisibilityBody> },
+  TContext
+> => {
+  const mutationKey = ["updateQuizVisibility"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateQuizVisibility>>,
+    { id: string; data: BodyType<UpdateQuizVisibilityBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateQuizVisibility(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateQuizVisibilityMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateQuizVisibility>>
+>;
+export type UpdateQuizVisibilityMutationBody =
+  BodyType<UpdateQuizVisibilityBody>;
+export type UpdateQuizVisibilityMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update quiz visibility (private or public)
+ */
+export const useUpdateQuizVisibility = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateQuizVisibility>>,
+    TError,
+    { id: string; data: BodyType<UpdateQuizVisibilityBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateQuizVisibility>>,
+  TError,
+  { id: string; data: BodyType<UpdateQuizVisibilityBody> },
+  TContext
+> => {
+  return useMutation(getUpdateQuizVisibilityMutationOptions(options));
+};
 
 /**
  * @summary Submit answers for a quiz

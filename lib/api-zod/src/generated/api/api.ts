@@ -80,6 +80,7 @@ export const GetQuizzesResponseItem = zod.object({
   sourceType: zod.enum(["manual", "topic-ai", "pdf-ai"]),
   sourceMetadata: zod.object({}).passthrough().nullish(),
   visibility: zod.enum(["private", "public"]),
+  shareId: zod.string(),
   createdAt: zod.string(),
 });
 export const GetQuizzesResponse = zod.array(GetQuizzesResponseItem);
@@ -123,6 +124,45 @@ export const CreateQuizBody = zod.object({
 });
 
 /**
+ * @summary Get a public quiz by share ID
+ */
+export const GetPublicQuizParams = zod.object({
+  shareId: zod.coerce.string(),
+});
+
+export const getPublicQuizResponseQuestionsItemOptionsMin = 4;
+export const getPublicQuizResponseQuestionsItemOptionsMax = 4;
+
+export const getPublicQuizResponseQuestionsItemCorrectAnswerMin = 0;
+export const getPublicQuizResponseQuestionsItemCorrectAnswerMax = 3;
+
+export const GetPublicQuizResponse = zod.object({
+  id: zod.string(),
+  title: zod.string(),
+  description: zod.string().optional(),
+  questions: zod.array(
+    zod.object({
+      question: zod.string(),
+      options: zod
+        .array(zod.string())
+        .min(getPublicQuizResponseQuestionsItemOptionsMin)
+        .max(getPublicQuizResponseQuestionsItemOptionsMax),
+      correctAnswer: zod
+        .number()
+        .min(getPublicQuizResponseQuestionsItemCorrectAnswerMin)
+        .max(getPublicQuizResponseQuestionsItemCorrectAnswerMax),
+      explanation: zod.string(),
+    }),
+  ),
+  createdBy: zod.string(),
+  sourceType: zod.enum(["manual", "topic-ai", "pdf-ai"]),
+  sourceMetadata: zod.object({}).passthrough().nullish(),
+  visibility: zod.enum(["private", "public"]),
+  shareId: zod.string(),
+  createdAt: zod.string(),
+});
+
+/**
  * @summary Get a quiz by ID
  */
 export const GetQuizParams = zod.object({
@@ -157,6 +197,50 @@ export const GetQuizResponse = zod.object({
   sourceType: zod.enum(["manual", "topic-ai", "pdf-ai"]),
   sourceMetadata: zod.object({}).passthrough().nullish(),
   visibility: zod.enum(["private", "public"]),
+  shareId: zod.string(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Update quiz visibility (private or public)
+ */
+export const UpdateQuizVisibilityParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateQuizVisibilityBody = zod.object({
+  visibility: zod.enum(["private", "public"]),
+});
+
+export const updateQuizVisibilityResponseQuestionsItemOptionsMin = 4;
+export const updateQuizVisibilityResponseQuestionsItemOptionsMax = 4;
+
+export const updateQuizVisibilityResponseQuestionsItemCorrectAnswerMin = 0;
+export const updateQuizVisibilityResponseQuestionsItemCorrectAnswerMax = 3;
+
+export const UpdateQuizVisibilityResponse = zod.object({
+  id: zod.string(),
+  title: zod.string(),
+  description: zod.string().optional(),
+  questions: zod.array(
+    zod.object({
+      question: zod.string(),
+      options: zod
+        .array(zod.string())
+        .min(updateQuizVisibilityResponseQuestionsItemOptionsMin)
+        .max(updateQuizVisibilityResponseQuestionsItemOptionsMax),
+      correctAnswer: zod
+        .number()
+        .min(updateQuizVisibilityResponseQuestionsItemCorrectAnswerMin)
+        .max(updateQuizVisibilityResponseQuestionsItemCorrectAnswerMax),
+      explanation: zod.string(),
+    }),
+  ),
+  createdBy: zod.string(),
+  sourceType: zod.enum(["manual", "topic-ai", "pdf-ai"]),
+  sourceMetadata: zod.object({}).passthrough().nullish(),
+  visibility: zod.enum(["private", "public"]),
+  shareId: zod.string(),
   createdAt: zod.string(),
 });
 

@@ -97,6 +97,18 @@ export interface CreateQuizBody {
   visibility?: CreateQuizBodyVisibility;
 }
 
+export type UpdateQuizVisibilityBodyVisibility =
+  (typeof UpdateQuizVisibilityBodyVisibility)[keyof typeof UpdateQuizVisibilityBodyVisibility];
+
+export const UpdateQuizVisibilityBodyVisibility = {
+  private: "private",
+  public: "public",
+} as const;
+
+export interface UpdateQuizVisibilityBody {
+  visibility: UpdateQuizVisibilityBodyVisibility;
+}
+
 export type QuizSourceType =
   (typeof QuizSourceType)[keyof typeof QuizSourceType];
 
@@ -125,6 +137,7 @@ export interface Quiz {
   sourceType: QuizSourceType;
   sourceMetadata?: QuizSourceMetadata;
   visibility: QuizVisibility;
+  shareId: string;
   createdAt: string;
 }
 

@@ -1,4 +1,5 @@
 import mongoose, { Document, Schema, Types } from "mongoose";
+import crypto from "node:crypto";
 
 export interface IQuestion {
   question: string;
@@ -10,6 +11,10 @@ export interface IQuestion {
 export type QuizSourceType = "manual" | "topic-ai" | "pdf-ai";
 export type QuizVisibility = "private" | "public";
 
+export function generateShareId(): string {
+  return crypto.randomBytes(12).toString("base64url");
+}
+
 export interface IQuiz extends Document {
   title: string;
   description?: string;
@@ -18,6 +23,7 @@ export interface IQuiz extends Document {
   sourceType: QuizSourceType;
   sourceMetadata?: Record<string, unknown> | null;
   visibility: QuizVisibility;
+  shareId: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -54,6 +60,12 @@ const QuizSchema = new Schema<IQuiz>(
       default: "private",
       required: true,
     },
+    shareId: {
+      type: String,
+      unique: true,
+      required: true,
+      default: () => generateShareId(),
+    },
   },
   { timestamps: true }
 );
@@ -62,3 +74,5 @@ const QuizSchema = new Schema<IQuiz>(
 QuizSchema.index({ createdBy: 1, createdAt: -1 });
 
 export const Quiz = mongoose.model<IQuiz>("Quiz", QuizSchema);
+
+

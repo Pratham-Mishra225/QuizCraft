@@ -108,6 +108,16 @@ export const UpdateQuizSchema = z.object({
 export type UpdateQuizInput = z.infer<typeof UpdateQuizSchema>;
 
 /**
+ * Schema for updating quiz visibility.
+ */
+export const UpdateQuizVisibilitySchema = z.object({
+  visibility: VisibilityEnum,
+});
+
+export type UpdateQuizVisibilityInput = z.infer<typeof UpdateQuizVisibilitySchema>;
+
+
+/**
  * Answer item schema in a quiz submission.
  */
 export const SubmissionAnswerSchema = z.object({

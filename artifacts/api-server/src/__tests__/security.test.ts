@@ -40,15 +40,16 @@ describe("Stage 4: API Validation & Authorization Hardening", () => {
 
   afterAll(async () => {
     await User.deleteMany({ email: { $regex: /@stage4test\.com$/ } });
-    await Quiz.deleteMany({ title: { $regex: /Stage 4 Test/ } });
-    await Attempt.deleteMany({ quizTitle: { $regex: /Stage 4 Test/ } });
+    await Quiz.deleteMany({ title: { $regex: /Stage \d+ Test/ } });
+    await Attempt.deleteMany({ quizTitle: { $regex: /Stage \d+ Test/ } });
     await closeMongoDB();
   });
 
   beforeEach(async () => {
     await User.deleteMany({ email: { $regex: /@stage4test\.com$/ } });
-    await Quiz.deleteMany({ title: { $regex: /Stage 4 Test/ } });
-    await Attempt.deleteMany({ quizTitle: { $regex: /Stage 4 Test/ } });
+    await Quiz.deleteMany({ title: { $regex: /Stage \d+ Test/ } });
+    await Attempt.deleteMany({ quizTitle: { $regex: /Stage \d+ Test/ } });
+
 
     // Register User A — cookie is the auth transport from Stage 5 onwards
     const resA = await request(app)
@@ -1662,3 +1663,462 @@ describe("Stage 6: Quiz & Attempt Data Model Redesign", () => {
       expect(getRes.body.message).toBe("Attempt not found");
     });
   });
+
+// ─── Stage 8: Public / Private Quiz Sharing ──────────────────────────────────
+
+describe("Stage 8: Public / Private Quiz Sharing", () => {
+  let userACookie: string;
+  let userAId: string;
+  let userBCookie: string;
+  let userBId: string;
+
+  beforeAll(async () => {
+    await connectToMongoDB();
+    await User.deleteMany({ email: { $regex: /@stage8test\.com$/ } });
+    await Quiz.deleteMany({ title: { $regex: /Stage 8 Test/ } });
+    await Attempt.deleteMany({ quizTitle: { $regex: /Stage 8 Test/ } });
+  });
+
+  afterAll(async () => {
+    await User.deleteMany({ email: { $regex: /@stage8test\.com$/ } });
+    await Quiz.deleteMany({ title: { $regex: /Stage 8 Test/ } });
+    await Attempt.deleteMany({ quizTitle: { $regex: /Stage 8 Test/ } });
+    await closeMongoDB();
+  });
+
+  beforeEach(async () => {
+    await User.deleteMany({ email: { $regex: /@stage8test\.com$/ } });
+    await Quiz.deleteMany({ title: { $regex: /Stage 8 Test/ } });
+    await Attempt.deleteMany({ quizTitle: { $regex: /Stage 8 Test/ } });
+
+    // Register User A (creator)
+    const resA = await request(app)
+      .post("/api/auth/register")
+      .send({
+        username: "stage8_usera",
+        email: "usera@stage8test.com",
+        password: "password123",
+      });
+    userACookie = extractCookie(resA);
+    userAId = resA.body.user.id;
+
+    // Register User B (participant)
+    const resB = await request(app)
+      .post("/api/auth/register")
+      .send({
+        username: "stage8_userb",
+        email: "userb@stage8test.com",
+        password: "password123",
+      });
+    userBCookie = extractCookie(resB);
+    userBId = resB.body.user.id;
+  });
+
+  const sampleQuestions = [
+    {
+      question: "What is the primary key in MongoDB?",
+      options: ["_id", "id", "key", "pk"],
+      correctAnswer: 0,
+      explanation: "_id is MongoDB default unique identifier",
+    },
+    {
+      question: "Which HTTP status code represents Not Found?",
+      options: ["200", "400", "404", "500"],
+      correctAnswer: 2,
+      explanation: "404 indicates resource not found",
+    },
+  ];
+
+  it("defaults new quiz to visibility=private and generates a secure random shareId", async () => {
+    const res = await request(app)
+      .post("/api/quizzes")
+      .set("Cookie", userACookie)
+      .send({
+        title: "Stage 8 Test Default Private",
+        questions: sampleQuestions,
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.visibility).toBe("private");
+    expect(res.body.shareId).toBeDefined();
+    expect(typeof res.body.shareId).toBe("string");
+    expect(res.body.shareId.length).toBeGreaterThanOrEqual(12);
+    // Ensure URL-safe base64url characters only
+    expect(/^[A-Za-z0-9_-]+$/.test(res.body.shareId)).toBe(true);
+  });
+
+  it("ignores client attempts to inject or overwrite shareId on creation and update", async () => {
+    const fakeShareId = "injected-custom-share-id";
+    const createRes = await request(app)
+      .post("/api/quizzes")
+      .set("Cookie", userACookie)
+      .send({
+        title: "Stage 8 Test Injected ShareId",
+        questions: sampleQuestions,
+        shareId: fakeShareId,
+      });
+
+    expect(createRes.status).toBe(201);
+    expect(createRes.body.shareId).not.toBe(fakeShareId);
+
+    const updateRes = await request(app)
+      .put(`/api/quizzes/${createRes.body.id}`)
+      .set("Cookie", userACookie)
+      .send({
+        title: "Stage 8 Test Updated Title",
+        questions: sampleQuestions,
+        shareId: fakeShareId,
+      });
+
+    expect(updateRes.status).toBe(200);
+    expect(updateRes.body.shareId).toBe(createRes.body.shareId);
+  });
+
+  it("allows quiz owner to toggle visibility (private -> public and public -> private)", async () => {
+    const createRes = await request(app)
+      .post("/api/quizzes")
+      .set("Cookie", userACookie)
+      .send({
+        title: "Stage 8 Test Toggle Visibility",
+        questions: sampleQuestions,
+      });
+
+    expect(createRes.body.visibility).toBe("private");
+
+    // Make Public via PATCH /api/quizzes/:id/visibility
+    const makePublicRes = await request(app)
+      .patch(`/api/quizzes/${createRes.body.id}/visibility`)
+      .set("Cookie", userACookie)
+      .send({ visibility: "public" });
+
+    expect(makePublicRes.status).toBe(200);
+    expect(makePublicRes.body.visibility).toBe("public");
+    expect(makePublicRes.body.shareId).toBe(createRes.body.shareId);
+
+    // Make Private via PATCH /api/quizzes/:id/visibility
+    const makePrivateRes = await request(app)
+      .patch(`/api/quizzes/${createRes.body.id}/visibility`)
+      .set("Cookie", userACookie)
+      .send({ visibility: "private" });
+
+    expect(makePrivateRes.status).toBe(200);
+    expect(makePrivateRes.body.visibility).toBe("private");
+    expect(makePrivateRes.body.shareId).toBe(createRes.body.shareId);
+  });
+
+  it("strictly forbids non-owner from changing quiz visibility", async () => {
+    const createRes = await request(app)
+      .post("/api/quizzes")
+      .set("Cookie", userACookie)
+      .send({
+        title: "Stage 8 Test Non-Owner Visibility Protection",
+        questions: sampleQuestions,
+      });
+
+    const patchRes = await request(app)
+      .patch(`/api/quizzes/${createRes.body.id}/visibility`)
+      .set("Cookie", userBCookie)
+      .send({ visibility: "public" });
+
+    expect(patchRes.status).toBe(404);
+    expect(patchRes.body.message).toBe("Quiz not found");
+  });
+
+  it("allows authenticated non-owner to retrieve a public quiz via shareId with Cache-Control headers", async () => {
+    // 1. User A creates public quiz
+    const createRes = await request(app)
+      .post("/api/quizzes")
+      .set("Cookie", userACookie)
+      .send({
+        title: "Stage 8 Test Public Access",
+        description: "Public test description",
+        questions: sampleQuestions,
+        visibility: "public",
+      });
+
+    const shareId = createRes.body.shareId;
+
+    // 2. User B fetches via GET /api/public/quizzes/:shareId
+    const publicRes = await request(app)
+      .get(`/api/public/quizzes/${shareId}`)
+      .set("Cookie", userBCookie);
+
+    expect(publicRes.status).toBe(200);
+    expect(publicRes.headers["cache-control"]).toContain("private");
+    expect(publicRes.headers["cache-control"]).toContain("no-store");
+    expect(publicRes.body.id).toBe(createRes.body.id);
+    expect(publicRes.body.shareId).toBe(shareId);
+    expect(publicRes.body.title).toBe("Stage 8 Test Public Access");
+    expect(publicRes.body.description).toBe("Public test description");
+    expect(publicRes.body.questions).toHaveLength(2);
+    expect(publicRes.body.visibility).toBe("public");
+  });
+
+  it("denies access to a private quiz when requested via shareId by another user", async () => {
+    const createRes = await request(app)
+      .post("/api/quizzes")
+      .set("Cookie", userACookie)
+      .send({
+        title: "Stage 8 Test Private via ShareId",
+        questions: sampleQuestions,
+        visibility: "private",
+      });
+
+    const shareId = createRes.body.shareId;
+
+    const publicRes = await request(app)
+      .get(`/api/public/quizzes/${shareId}`)
+      .set("Cookie", userBCookie);
+
+    expect(publicRes.status).toBe(404);
+    expect(publicRes.body.message).toBe("Quiz not found");
+  });
+
+  it("denies unauthenticated requests to /api/public/quizzes/:shareId with 401", async () => {
+    const createRes = await request(app)
+      .post("/api/quizzes")
+      .set("Cookie", userACookie)
+      .send({
+        title: "Stage 8 Test Unauth Public Access",
+        questions: sampleQuestions,
+        visibility: "public",
+      });
+
+    const shareId = createRes.body.shareId;
+
+    const unauthRes = await request(app).get(`/api/public/quizzes/${shareId}`);
+    expect(unauthRes.status).toBe(401);
+  });
+
+  it("returns safe 404 for invalid or non-existent shareId without leaking database details", async () => {
+    const res = await request(app)
+      .get("/api/public/quizzes/non-existent-random-share-id-12345")
+      .set("Cookie", userBCookie);
+
+    expect(res.status).toBe(404);
+    expect(res.body.message).toBe("Quiz not found");
+  });
+
+  it("allows non-owner to submit a public quiz and assigns Attempt strictly to participant", async () => {
+    // 1. User A creates public quiz
+    const createRes = await request(app)
+      .post("/api/quizzes")
+      .set("Cookie", userACookie)
+      .send({
+        title: "Stage 8 Test Non-Owner Submit",
+        questions: sampleQuestions,
+        visibility: "public",
+      });
+
+    const quizId = createRes.body.id;
+
+    // 2. User B submits answers
+    const submitRes = await request(app)
+      .post(`/api/quizzes/${quizId}/submit`)
+      .set("Cookie", userBCookie)
+      .send({
+        answers: [
+          { questionIndex: 0, selectedOption: 0 }, // Correct
+          { questionIndex: 1, selectedOption: 0 }, // Incorrect (correct is 2)
+        ],
+      });
+
+    expect(submitRes.status).toBe(201);
+    expect(submitRes.body.userId).toBe(userBId); // Must be User B, NOT User A!
+    expect(submitRes.body.quizId).toBe(quizId);
+    expect(submitRes.body.quizTitle).toBe("Stage 8 Test Non-Owner Submit");
+    expect(submitRes.body.score).toBe(1);
+    expect(submitRes.body.totalQuestions).toBe(2);
+    expect(submitRes.body.questionSnapshot).toHaveLength(2);
+
+    // 3. User B can view their attempt in their attempt history
+    const attemptsRes = await request(app)
+      .get("/api/attempts")
+      .set("Cookie", userBCookie);
+
+    expect(attemptsRes.status).toBe(200);
+    expect(attemptsRes.body.some((a: { id: string }) => a.id === submitRes.body.id)).toBe(true);
+
+    // 4. User B does NOT see User A's quiz in their "My Quizzes" list
+    const myQuizzesRes = await request(app)
+      .get("/api/quizzes")
+      .set("Cookie", userBCookie);
+
+    expect(myQuizzesRes.status).toBe(200);
+    expect(myQuizzesRes.body.some((q: { id: string }) => q.id === quizId)).toBe(false);
+
+    // 5. User A cannot view User B's attempt (IDOR protection on attempt)
+    const userAAttemptView = await request(app)
+      .get(`/api/attempts/${submitRes.body.id}`)
+      .set("Cookie", userACookie);
+
+    expect(userAAttemptView.status).toBe(404);
+  });
+
+  it("supports submitting public quiz using shareId as the route parameter", async () => {
+    const createRes = await request(app)
+      .post("/api/quizzes")
+      .set("Cookie", userACookie)
+      .send({
+        title: "Stage 8 Test Submit via ShareId",
+        questions: sampleQuestions,
+        visibility: "public",
+      });
+
+    const shareId = createRes.body.shareId;
+
+    const submitRes = await request(app)
+      .post(`/api/quizzes/${shareId}/submit`)
+      .set("Cookie", userBCookie)
+      .send({
+        answers: [
+          { questionIndex: 0, selectedOption: 0 },
+          { questionIndex: 1, selectedOption: 2 },
+        ],
+      });
+
+    expect(submitRes.status).toBe(201);
+    expect(submitRes.body.userId).toBe(userBId);
+    expect(submitRes.body.score).toBe(2);
+  });
+
+  it("prevents participant from modifying or deleting creator's public quiz", async () => {
+    const createRes = await request(app)
+      .post("/api/quizzes")
+      .set("Cookie", userACookie)
+      .send({
+        title: "Stage 8 Test Creator Protected Public Quiz",
+        questions: sampleQuestions,
+        visibility: "public",
+      });
+
+    const quizId = createRes.body.id;
+
+    // User B tries to update User A's public quiz
+    const updateRes = await request(app)
+      .put(`/api/quizzes/${quizId}`)
+      .set("Cookie", userBCookie)
+      .send({
+        title: "Hacked Title",
+        questions: sampleQuestions,
+      });
+    expect(updateRes.status).toBe(404);
+
+    // User B tries to delete User A's public quiz
+    const deleteRes = await request(app)
+      .delete(`/api/quizzes/${quizId}`)
+      .set("Cookie", userBCookie);
+    expect(deleteRes.status).toBe(404);
+  });
+
+  it("revokes participant access when public quiz is made private, but preserves historical attempts", async () => {
+    // 1. User A creates public quiz
+    const createRes = await request(app)
+      .post("/api/quizzes")
+      .set("Cookie", userACookie)
+      .send({
+        title: "Stage 8 Test Public to Private Transition",
+        questions: sampleQuestions,
+        visibility: "public",
+      });
+
+    const quizId = createRes.body.id;
+    const shareId = createRes.body.shareId;
+
+    // 2. User B takes the quiz and creates an Attempt
+    const submitRes = await request(app)
+      .post(`/api/quizzes/${quizId}/submit`)
+      .set("Cookie", userBCookie)
+      .send({
+        answers: [
+          { questionIndex: 0, selectedOption: 0 },
+          { questionIndex: 1, selectedOption: 2 },
+        ],
+      });
+    expect(submitRes.status).toBe(201);
+    const attemptId = submitRes.body.id;
+
+    // 3. User A makes the quiz private
+    const patchRes = await request(app)
+      .patch(`/api/quizzes/${quizId}/visibility`)
+      .set("Cookie", userACookie)
+      .send({ visibility: "private" });
+    expect(patchRes.status).toBe(200);
+
+    // 4. User B now tries to access the shareId -> 404
+    const getShareRes = await request(app)
+      .get(`/api/public/quizzes/${shareId}`)
+      .set("Cookie", userBCookie);
+    expect(getShareRes.status).toBe(404);
+
+    // 5. User B tries to submit again -> 404
+    const submitAgainRes = await request(app)
+      .post(`/api/quizzes/${quizId}/submit`)
+      .set("Cookie", userBCookie)
+      .send({
+        answers: [
+          { questionIndex: 0, selectedOption: 0 },
+          { questionIndex: 1, selectedOption: 2 },
+        ],
+      });
+    expect(submitAgainRes.status).toBe(404);
+
+    // 6. User B's historical attempt remains completely accessible with intact snapshot
+    const attemptRes = await request(app)
+      .get(`/api/attempts/${attemptId}`)
+      .set("Cookie", userBCookie);
+    expect(attemptRes.status).toBe(200);
+    expect(attemptRes.body.score).toBe(2);
+    expect(attemptRes.body.questionSnapshot).toHaveLength(2);
+  });
+
+  it("preserves participant attempts even if creator deletes the public quiz", async () => {
+    // 1. User A creates public quiz
+    const createRes = await request(app)
+      .post("/api/quizzes")
+      .set("Cookie", userACookie)
+      .send({
+        title: "Stage 8 Test Delete Public Quiz",
+        questions: sampleQuestions,
+        visibility: "public",
+      });
+
+    const quizId = createRes.body.id;
+    const shareId = createRes.body.shareId;
+
+    // 2. User B takes the quiz
+    const submitRes = await request(app)
+      .post(`/api/quizzes/${quizId}/submit`)
+      .set("Cookie", userBCookie)
+      .send({
+        answers: [
+          { questionIndex: 0, selectedOption: 0 },
+          { questionIndex: 1, selectedOption: 2 },
+        ],
+      });
+    const attemptId = submitRes.body.id;
+
+    // 3. User A deletes the quiz
+    const deleteRes = await request(app)
+      .delete(`/api/quizzes/${quizId}`)
+      .set("Cookie", userACookie);
+    expect(deleteRes.status).toBe(200);
+
+    // 4. Public share link is no longer accessible
+    const getShareRes = await request(app)
+      .get(`/api/public/quizzes/${shareId}`)
+      .set("Cookie", userBCookie);
+    expect(getShareRes.status).toBe(404);
+
+    // 5. User B's attempt remains intact and queryable
+    const attemptRes = await request(app)
+      .get(`/api/attempts/${attemptId}`)
+      .set("Cookie", userBCookie);
+    expect(attemptRes.status).toBe(200);
+    expect(attemptRes.body.quizTitle).toBe("Stage 8 Test Delete Public Quiz");
+    expect(attemptRes.body.score).toBe(2);
+  });
+});
+
+
+

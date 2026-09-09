@@ -11,12 +11,10 @@
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
-    "@workspace/db": "workspace:*",
     "@workspace/integrations-gemini-ai": "workspace:*",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2",
-    "drizzle-orm": "catalog:",
     "express": "^5",
     "express-rate-limit": "^8.5.2",
     "helmet": "^8.2.0",

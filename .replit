@@ -31,7 +31,6 @@ externalPort = 80
 localPort = 24311
 externalPort = 3000
 
-[userenv]
-
-[userenv.shared]
-JWT_SECRET = "ff341822c42aa82eed1cc179c2c15e78f3b1a28b91c5fc29bf6f7a7d99a90842"
+# Application secrets and environment variables belong in artifacts/api-server/.env
+# See artifacts/api-server/.env.example for required variables.
+# Do NOT place secrets in this file — it is tracked by git.

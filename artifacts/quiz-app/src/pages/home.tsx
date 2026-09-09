@@ -1,29 +1,112 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { useGetQuizzes, useGetAttempts, getGetQuizzesQueryKey, getGetAttemptsQueryKey } from "@workspace/api-client-react";
+import {
+  useGetQuizzes,
+  useGetAttempts,
+  useUpdateQuizVisibility,
+  getGetQuizzesQueryKey,
+  getGetAttemptsQueryKey,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Layout } from "@/components/layout";
-import { PlusCircle, PlayCircle, Trophy, Clock, ArrowRight, Loader2, BrainCircuit } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import {
+  PlusCircle,
+  PlayCircle,
+  Trophy,
+  Clock,
+  ArrowRight,
+  Loader2,
+  BrainCircuit,
+  Globe,
+  Lock,
+  Copy,
+  Check,
+} from "lucide-react";
 import { format } from "date-fns";
 
 export default function HomePage() {
   const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const { data: quizzes, isLoading: isQuizzesLoading } = useGetQuizzes({
     query: {
       queryKey: getGetQuizzesQueryKey(),
       enabled: true,
-    }
+    },
   });
 
   const { data: attempts, isLoading: isAttemptsLoading } = useGetAttempts({
     query: {
       queryKey: getGetAttemptsQueryKey(),
       enabled: isAuthenticated,
-    }
+    },
   });
+
+  const updateVisibilityMutation = useUpdateQuizVisibility();
+
+  const handleToggleVisibility = (quizId: string, currentVisibility: string) => {
+    const nextVisibility = currentVisibility === "public" ? "private" : "public";
+    updateVisibilityMutation.mutate(
+      {
+        id: quizId,
+        data: { visibility: nextVisibility as "public" | "private" },
+      },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetQuizzesQueryKey() });
+          toast({
+            title: `Quiz is now ${nextVisibility}`,
+            description:
+              nextVisibility === "public"
+                ? "Anyone with the share link can now view and take this quiz."
+                : "This quiz is now private and accessible only to you.",
+          });
+        },
+        onError: (err) => {
+          toast({
+            variant: "destructive",
+            title: "Failed to update visibility",
+            description: err.message || "An error occurred.",
+          });
+        },
+      }
+    );
+  };
+
+  const handleCopyShareLink = async (shareId: string, quizId: string) => {
+    const shareUrl = `${window.location.origin}/quiz/${shareId}`;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        // Fallback for older browsers
+        const textarea = document.createElement("textarea");
+        textarea.value = shareUrl;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      setCopiedId(quizId);
+      toast({
+        title: "Link copied!",
+        description: "Public share link copied to clipboard.",
+      });
+      setTimeout(() => setCopiedId(null), 2500);
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Copy failed",
+        description: `Could not copy automatically. URL: ${shareUrl}`,
+      });
+    }
+  };
 
   if (isAuthLoading) {
     return (
@@ -93,32 +176,116 @@ export default function HomePage() {
               </div>
             ) : quizzes && quizzes.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {quizzes.map((quiz) => (
-                  <Card key={quiz.id} className="flex flex-col hover-elevate group overflow-hidden border-2 transition-colors hover:border-primary/50">
-                    <CardHeader>
-                      <CardTitle className="line-clamp-1">{quiz.title}</CardTitle>
-                      <CardDescription className="line-clamp-2 min-h-[40px]">
-                        {quiz.description || "No description provided."}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="mt-auto">
-                      <div className="flex items-center text-sm text-muted-foreground bg-muted/30 w-fit px-2.5 py-1 rounded-md">
-                        <Clock className="mr-1.5 h-4 w-4 text-primary/70" />
-                        {quiz.questions.length} questions
-                      </div>
-                    </CardContent>
-                    <CardFooter className="pt-0 pb-6">
-                      <Link href={`/quiz/${quiz.id}`} className="w-full">
-                        <Button variant="secondary" className="w-full group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                          <PlayCircle className="mr-2 h-4 w-4" />
-                          Take Quiz
-                        </Button>
-                      </Link>
-                    </CardFooter>
-                  </Card>
-                ))}
+                {quizzes.map((quiz) => {
+                  const isPublic = quiz.visibility === "public";
+                  const isPending =
+                    updateVisibilityMutation.isPending &&
+                    updateVisibilityMutation.variables?.id === quiz.id;
+
+                  return (
+                    <Card
+                      key={quiz.id}
+                      className="flex flex-col hover-elevate group overflow-hidden border-2 transition-colors hover:border-primary/50"
+                    >
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span
+                            className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full ${
+                              isPublic
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
+                                : "bg-muted text-muted-foreground border border-border"
+                            }`}
+                          >
+                            {isPublic ? (
+                              <>
+                                <Globe className="h-3 w-3" /> Public
+                              </>
+                            ) : (
+                              <>
+                                <Lock className="h-3 w-3" /> Private
+                              </>
+                            )}
+                          </span>
+
+                          {/* Share link button for public quizzes */}
+                          {isPublic && quiz.shareId && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleCopyShareLink(quiz.shareId, quiz.id);
+                              }}
+                              title="Copy public share link"
+                            >
+                              {copiedId === quiz.id ? (
+                                <>
+                                  <Check className="h-3.5 w-3.5 text-emerald-600 mr-1" />
+                                  Copied
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="h-3.5 w-3.5 mr-1" />
+                                  Share Link
+                                </>
+                              )}
+                            </Button>
+                          )}
+                        </div>
+
+                        <CardTitle className="line-clamp-1">{quiz.title}</CardTitle>
+                        <CardDescription className="line-clamp-2 min-h-[40px]">
+                          {quiz.description || "No description provided."}
+                        </CardDescription>
+                      </CardHeader>
+
+                      <CardContent className="mt-auto pt-0 pb-4">
+                        <div className="flex items-center justify-between text-sm text-muted-foreground">
+                          <div className="flex items-center bg-muted/30 px-2.5 py-1 rounded-md">
+                            <Clock className="mr-1.5 h-4 w-4 text-primary/70" />
+                            {quiz.questions.length} questions
+                          </div>
+
+                          {/* Visibility Toggle Button */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            disabled={isPending}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleToggleVisibility(quiz.id, quiz.visibility || "private");
+                            }}
+                          >
+                            {isPending ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : isPublic ? (
+                              "Make Private"
+                            ) : (
+                              "Make Public"
+                            )}
+                          </Button>
+                        </div>
+                      </CardContent>
+
+                      <CardFooter className="pt-0 pb-6">
+                        <Link href={`/quiz/${quiz.id}`} className="w-full">
+                          <Button
+                            variant="secondary"
+                            className="w-full group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
+                          >
+                            <PlayCircle className="mr-2 h-4 w-4" />
+                            Take Quiz
+                          </Button>
+                        </Link>
+                      </CardFooter>
+                    </Card>
+                  );
+                })}
               </div>
             ) : (
+
               <Card className="border-dashed bg-muted/20">
                 <CardContent className="flex flex-col items-center justify-center py-16 text-center space-y-4">
                   <div className="size-16 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-2">

@@ -139,6 +139,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/Quiz"
 
+  /public/quizzes/{shareId}:
+    get:
+      operationId: getPublicQuiz
+      tags: [quizzes]
+      summary: Get a public quiz by share ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: shareId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Public quiz found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quiz"
+        "404":
+          description: Quiz not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /quizzes/{id}:
     get:
       operationId: getQuiz
@@ -165,6 +192,46 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /quizzes/{id}/visibility:
+    patch:
+      operationId: updateQuizVisibility
+      tags: [quizzes]
+      summary: Update quiz visibility (private or public)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateQuizVisibilityBody"
+      responses:
+        "200":
+          description: Visibility updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quiz"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Quiz not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 
   /quizzes/{id}/submit:
     post:
@@ -460,6 +527,15 @@ components:
         - title
         - questions
 
+    UpdateQuizVisibilityBody:
+      type: object
+      properties:
+        visibility:
+          type: string
+          enum: [private, public]
+      required:
+        - visibility
+
     Quiz:
       type: object
       properties:
@@ -484,6 +560,8 @@ components:
         visibility:
           type: string
           enum: [private, public]
+        shareId:
+          type: string
         createdAt:
           type: string
       required:
@@ -493,7 +571,9 @@ components:
         - createdBy
         - sourceType
         - visibility
+        - shareId
         - createdAt
+
 
     QuestionSnapshot:
       type: object

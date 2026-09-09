@@ -1,10 +1,11 @@
 import { Router, Response } from "express";
-import { Quiz } from "../models/Quiz.js";
+import { Quiz, generateShareId } from "../models/Quiz.js";
 import { Attempt } from "../models/Attempt.js";
 import { requireAuth, AuthRequest } from "../middlewares/auth.js";
 import {
   CreateQuizSchema,
   UpdateQuizSchema,
+  UpdateQuizVisibilitySchema,
   SubmitQuizSchema,
 } from "../schemas/quiz.js";
 import { Types } from "mongoose";
@@ -22,6 +23,7 @@ type QuizDoc = {
   sourceType?: string;
   sourceMetadata?: Record<string, unknown> | null;
   visibility?: string;
+  shareId: string;
   createdAt: Date;
 };
 
@@ -35,6 +37,7 @@ function serializeQuiz(q: QuizDoc) {
     sourceType: q.sourceType ?? "manual",
     sourceMetadata: q.sourceMetadata ?? null,
     visibility: q.visibility ?? "private",
+    shareId: q.shareId,
     createdAt: q.createdAt ? q.createdAt.toISOString() : new Date().toISOString(),
   };
 }
@@ -59,15 +62,37 @@ router.post("/", async (req: AuthRequest, res: Response) => {
 
   const { title, description, questions, sourceType, sourceMetadata, visibility } = parsed.data;
 
-  const quiz = await Quiz.create({
-    title,
-    description,
-    questions,
-    createdBy: req.userId,
-    sourceType: sourceType ?? "manual",
-    sourceMetadata: sourceMetadata ?? null,
-    visibility: visibility ?? "private",
-  });
+  let quiz;
+  let attempts = 0;
+  const maxAttempts = 3;
+
+  while (attempts < maxAttempts) {
+    try {
+      quiz = await Quiz.create({
+        title,
+        description,
+        questions,
+        createdBy: req.userId,
+        sourceType: sourceType ?? "manual",
+        sourceMetadata: sourceMetadata ?? null,
+        visibility: visibility ?? "private",
+        shareId: generateShareId(),
+      });
+      break;
+    } catch (err: unknown) {
+      attempts++;
+      // If error is duplicate key on shareId, retry with a fresh shareId
+      if (err && typeof err === "object" && "code" in err && err.code === 11000 && attempts < maxAttempts) {
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  if (!quiz) {
+    res.status(500).json({ message: "Failed to create quiz" });
+    return;
+  }
 
   res.status(201).json(serializeQuiz(quiz.toObject() as QuizDoc));
 });
@@ -125,6 +150,37 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
   res.json(serializeQuiz(quiz));
 });
 
+// ─── PATCH /api/quizzes/:id/visibility ──────────────────────────────────────
+// Update visibility of a quiz (strictly owner-scoped)
+router.patch("/:id/visibility", async (req: AuthRequest, res: Response) => {
+  const id = req.params["id"] as string;
+  if (!Types.ObjectId.isValid(id)) {
+    res.status(404).json({ message: "Quiz not found" });
+    return;
+  }
+
+  const parsed = UpdateQuizVisibilitySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "Validation error", errors: parsed.error.flatten() });
+    return;
+  }
+
+  const { visibility } = parsed.data;
+
+  const quiz = await Quiz.findOneAndUpdate(
+    { _id: id, createdBy: req.userId },
+    { $set: { visibility } },
+    { returnDocument: "after" }
+  ).lean<QuizDoc>();
+
+  if (!quiz) {
+    res.status(404).json({ message: "Quiz not found" });
+    return;
+  }
+
+  res.json(serializeQuiz(quiz));
+});
+
 // ─── DELETE /api/quizzes/:id ─────────────────────────────────────────────────
 // Delete an existing quiz (strictly owner-scoped). Does NOT cascade delete attempts.
 router.delete("/:id", async (req: AuthRequest, res: Response) => {
@@ -149,9 +205,27 @@ router.delete("/:id", async (req: AuthRequest, res: Response) => {
 
 // ─── POST /api/quizzes/:id/submit ────────────────────────────────────────────
 // Submit answers for scoring (server-authoritative scoring & immutable historical snapshot)
+// Allows owner submission for private/public quizzes, and authenticated participant submission for public quizzes.
 router.post("/:id/submit", async (req: AuthRequest, res: Response) => {
   const id = req.params["id"] as string;
-  if (!Types.ObjectId.isValid(id)) {
+
+  let quiz: QuizDoc | null = null;
+  if (Types.ObjectId.isValid(id)) {
+    quiz = await Quiz.findById(id).lean<QuizDoc>();
+  } else {
+    // If not a valid ObjectId, try finding by shareId
+    quiz = await Quiz.findOne({ shareId: id }).lean<QuizDoc>();
+  }
+
+  if (!quiz) {
+    res.status(404).json({ message: "Quiz not found" });
+    return;
+  }
+
+  // Authorization: allow owner for any visibility, or any authenticated user for public quizzes
+  const isOwner = quiz.createdBy.toString() === req.userId;
+  const isPublic = quiz.visibility === "public";
+  if (!isOwner && !isPublic) {
     res.status(404).json({ message: "Quiz not found" });
     return;
   }
@@ -159,12 +233,6 @@ router.post("/:id/submit", async (req: AuthRequest, res: Response) => {
   const parsed = SubmitQuizSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ message: "Validation error", errors: parsed.error.flatten() });
-    return;
-  }
-
-  const quiz = await Quiz.findOne({ _id: id, createdBy: req.userId }).lean<QuizDoc>();
-  if (!quiz) {
-    res.status(404).json({ message: "Quiz not found" });
     return;
   }
 
@@ -218,7 +286,7 @@ router.post("/:id/submit", async (req: AuthRequest, res: Response) => {
   // Client-supplied score, isCorrect, questionSnapshot, quizTitle are never trusted
   let score = 0;
   const evaluatedAnswers = answers.map((answer) => {
-    const question = quiz.questions[answer.questionIndex];
+    const question = quiz!.questions[answer.questionIndex];
     const isCorrect = Boolean(question && question.correctAnswer === answer.selectedOption);
     if (isCorrect) {
       score++;
@@ -239,7 +307,7 @@ router.post("/:id/submit", async (req: AuthRequest, res: Response) => {
     explanation: q.explanation ?? "",
   }));
 
-  // 4. Persist attempt scoped to authenticated user
+  // 4. Persist attempt strictly scoped to the authenticated participant (req.userId)
   const attempt = await Attempt.create({
     quizId: quiz._id,
     quizTitle: quiz.title,
@@ -268,3 +336,4 @@ router.post("/:id/submit", async (req: AuthRequest, res: Response) => {
 });
 
 export default router;
+

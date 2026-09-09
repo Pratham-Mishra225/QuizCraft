@@ -2,8 +2,10 @@ import { useState } from "react";
 import { useLocation, useParams } from "wouter";
 import {
   useGetQuiz,
+  useGetPublicQuiz,
   useSubmitQuiz,
   getGetQuizQueryKey,
+  getGetPublicQuizQueryKey,
   getGetAttemptsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -31,9 +33,33 @@ export default function QuizTakePage() {
   const queryClient = useQueryClient();
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
 
-  const { data: quiz, isLoading: isQuizLoading, error: quizError } = useGetQuiz(id || "", {
-    query: { enabled: !!id, queryKey: getGetQuizQueryKey(id || "") },
+  // Try fetching as an owner quiz first
+  const {
+    data: ownerQuiz,
+    isLoading: isOwnerLoading,
+  } = useGetQuiz(id || "", {
+    query: {
+      enabled: !!id && isAuthenticated,
+      queryKey: getGetQuizQueryKey(id || ""),
+      retry: false,
+    },
   });
+
+  // If not found or not owner, try fetching as a public quiz by shareId / id
+  const {
+    data: publicQuiz,
+    isLoading: isPublicLoading,
+    error: publicError,
+  } = useGetPublicQuiz(id || "", {
+    query: {
+      enabled: !!id && isAuthenticated && !ownerQuiz && !isOwnerLoading,
+      queryKey: getGetPublicQuizQueryKey(id || ""),
+      retry: false,
+    },
+  });
+
+  const quiz = ownerQuiz || publicQuiz;
+  const isQuizLoading = isOwnerLoading || (isPublicLoading && !ownerQuiz);
 
   const submitMutation = useSubmitQuiz();
 
@@ -56,16 +82,20 @@ export default function QuizTakePage() {
     );
   }
 
-  if (quizError || !quiz) {
+  if (!quiz) {
     return (
       <Layout>
         <div className="flex-1 flex items-center justify-center flex-col gap-4">
           <h2 className="text-2xl font-bold">Quiz Not Found</h2>
+          <p className="text-muted-foreground">
+            This quiz is either private, does not exist, or you do not have permission to view it.
+          </p>
           <Button onClick={() => setLocation("/")}>Return Home</Button>
         </div>
       </Layout>
     );
   }
+
 
   const currentQuestion = quiz.questions[currentIndex];
   const progress = (currentIndex / quiz.questions.length) * 100;

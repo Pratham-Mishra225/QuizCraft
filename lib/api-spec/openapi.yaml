@@ -459,7 +459,18 @@ components:
         - username
         - email
 
+    QuizQuestionSource:
+      type: object
+      properties:
+        documentId:
+          type: string
+        chunkId:
+          type: string
+        pageNumber:
+          type: integer
+
     QuizQuestion:
+
       type: object
       properties:
         question:
@@ -476,11 +487,14 @@ components:
           maximum: 3
         explanation:
           type: string
+        source:
+          $ref: "#/components/schemas/QuizQuestionSource"
       required:
         - question
         - options
         - correctAnswer
         - explanation
+
 
     GenerateQuizBody:
       type: object
@@ -594,12 +608,15 @@ components:
           maximum: 3
         explanation:
           type: string
+        source:
+          $ref: "#/components/schemas/QuizQuestionSource"
       required:
         - questionIndex
         - question
         - options
         - correctAnswer
         - explanation
+
 
     AnswerItem:
       type: object

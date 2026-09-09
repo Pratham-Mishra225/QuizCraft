@@ -41,7 +41,16 @@ const envSchema = z.object({
    * Both the token and the cookie use this value so they are always in sync.
    */
   AUTH_TOKEN_TTL: z.string().optional().default("7d"),
+  /**
+   * RAG & PDF pipeline configuration
+   */
+  EMBEDDING_MODEL: z.string().optional().default("text-embedding-004"),
+  RAG_TOP_K: z.coerce.number().int().min(1).max(20).optional().default(5),
+  RAG_CHUNK_SIZE: z.coerce.number().int().min(100).max(4000).optional().default(800),
+  RAG_CHUNK_OVERLAP: z.coerce.number().int().min(0).max(1000).optional().default(150),
+  PDF_MAX_PAGES: z.coerce.number().int().min(1).max(200).optional().default(50),
 });
+
 
 const parsed = envSchema.safeParse(process.env);
 

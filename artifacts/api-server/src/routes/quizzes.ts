@@ -18,7 +18,13 @@ type QuizDoc = {
   _id: Types.ObjectId;
   title: string;
   description?: string;
-  questions: { question: string; options: string[]; correctAnswer: number; explanation?: string }[];
+  questions: {
+    question: string;
+    options: string[];
+    correctAnswer: number;
+    explanation?: string;
+    source?: { documentId?: string; chunkId?: string; pageNumber?: number } | null;
+  }[];
   createdBy: Types.ObjectId;
   sourceType?: string;
   sourceMetadata?: Record<string, unknown> | null;
@@ -26,6 +32,7 @@ type QuizDoc = {
   shareId: string;
   createdAt: Date;
 };
+
 
 function serializeQuiz(q: QuizDoc) {
   return {
@@ -305,7 +312,9 @@ router.post("/:id/submit", async (req: AuthRequest, res: Response) => {
     options: [...q.options],
     correctAnswer: q.correctAnswer,
     explanation: q.explanation ?? "",
+    source: q.source ?? null,
   }));
+
 
   // 4. Persist attempt strictly scoped to the authenticated participant (req.userId)
   const attempt = await Attempt.create({

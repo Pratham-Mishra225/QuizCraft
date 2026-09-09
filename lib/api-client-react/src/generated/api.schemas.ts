@@ -35,6 +35,12 @@ export interface AuthResponse {
   user: User;
 }
 
+export interface QuizQuestionSource {
+  documentId?: string;
+  chunkId?: string;
+  pageNumber?: number;
+}
+
 export interface QuizQuestion {
   question: string;
   /**
@@ -48,6 +54,7 @@ export interface QuizQuestion {
    */
   correctAnswer: number;
   explanation: string;
+  source?: QuizQuestionSource;
 }
 
 export type GenerateQuizBodyDifficulty =
@@ -155,6 +162,7 @@ export interface QuestionSnapshot {
    */
   correctAnswer: number;
   explanation: string;
+  source?: QuizQuestionSource;
 }
 
 export interface AnswerItem {

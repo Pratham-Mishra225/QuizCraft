@@ -1,11 +1,18 @@
 import mongoose, { Document, Schema, Types } from "mongoose";
 import crypto from "node:crypto";
 
+export interface IQuestionSource {
+  documentId?: string;
+  chunkId?: string;
+  pageNumber?: number;
+}
+
 export interface IQuestion {
   question: string;
   options: string[];
   correctAnswer: number;
   explanation?: string;
+  source?: IQuestionSource | null;
 }
 
 export type QuizSourceType = "manual" | "topic-ai" | "pdf-ai";
@@ -28,15 +35,26 @@ export interface IQuiz extends Document {
   updatedAt: Date;
 }
 
+const QuestionSourceSchema = new Schema<IQuestionSource>(
+  {
+    documentId: { type: String, default: "" },
+    chunkId: { type: String, default: "" },
+    pageNumber: { type: Number, default: 0 },
+  },
+  { _id: false }
+);
+
 const QuestionSchema = new Schema<IQuestion>(
   {
     question: { type: String, required: true },
     options: { type: [String], required: true },
     correctAnswer: { type: Number, required: true },
     explanation: { type: String, default: "" },
+    source: { type: QuestionSourceSchema, default: null },
   },
   { _id: false }
 );
+
 
 const QuizSchema = new Schema<IQuiz>(
   {

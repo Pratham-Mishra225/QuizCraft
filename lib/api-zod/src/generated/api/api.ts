@@ -74,6 +74,13 @@ export const GetQuizzesResponseItem = zod.object({
         .min(getQuizzesResponseQuestionsItemCorrectAnswerMin)
         .max(getQuizzesResponseQuestionsItemCorrectAnswerMax),
       explanation: zod.string(),
+      source: zod
+        .object({
+          documentId: zod.string().optional(),
+          chunkId: zod.string().optional(),
+          pageNumber: zod.number().optional(),
+        })
+        .optional(),
     }),
   ),
   createdBy: zod.string(),
@@ -112,6 +119,13 @@ export const CreateQuizBody = zod.object({
         .min(createQuizBodyQuestionsItemCorrectAnswerMin)
         .max(createQuizBodyQuestionsItemCorrectAnswerMax),
       explanation: zod.string(),
+      source: zod
+        .object({
+          documentId: zod.string().optional(),
+          chunkId: zod.string().optional(),
+          pageNumber: zod.number().optional(),
+        })
+        .optional(),
     }),
   ),
   sourceType: zod
@@ -152,6 +166,13 @@ export const GetPublicQuizResponse = zod.object({
         .min(getPublicQuizResponseQuestionsItemCorrectAnswerMin)
         .max(getPublicQuizResponseQuestionsItemCorrectAnswerMax),
       explanation: zod.string(),
+      source: zod
+        .object({
+          documentId: zod.string().optional(),
+          chunkId: zod.string().optional(),
+          pageNumber: zod.number().optional(),
+        })
+        .optional(),
     }),
   ),
   createdBy: zod.string(),
@@ -191,6 +212,13 @@ export const GetQuizResponse = zod.object({
         .min(getQuizResponseQuestionsItemCorrectAnswerMin)
         .max(getQuizResponseQuestionsItemCorrectAnswerMax),
       explanation: zod.string(),
+      source: zod
+        .object({
+          documentId: zod.string().optional(),
+          chunkId: zod.string().optional(),
+          pageNumber: zod.number().optional(),
+        })
+        .optional(),
     }),
   ),
   createdBy: zod.string(),
@@ -234,6 +262,13 @@ export const UpdateQuizVisibilityResponse = zod.object({
         .min(updateQuizVisibilityResponseQuestionsItemCorrectAnswerMin)
         .max(updateQuizVisibilityResponseQuestionsItemCorrectAnswerMax),
       explanation: zod.string(),
+      source: zod
+        .object({
+          documentId: zod.string().optional(),
+          chunkId: zod.string().optional(),
+          pageNumber: zod.number().optional(),
+        })
+        .optional(),
     }),
   ),
   createdBy: zod.string(),
@@ -289,6 +324,13 @@ export const GetAttemptsResponseItem = zod.object({
           .min(getAttemptsResponseQuestionSnapshotItemCorrectAnswerMin)
           .max(getAttemptsResponseQuestionSnapshotItemCorrectAnswerMax),
         explanation: zod.string(),
+        source: zod
+          .object({
+            documentId: zod.string().optional(),
+            chunkId: zod.string().optional(),
+            pageNumber: zod.number().optional(),
+          })
+          .optional(),
       }),
     )
     .optional(),
@@ -337,6 +379,13 @@ export const GetAttemptResponse = zod.object({
           .min(getAttemptResponseQuestionSnapshotItemCorrectAnswerMin)
           .max(getAttemptResponseQuestionSnapshotItemCorrectAnswerMax),
         explanation: zod.string(),
+        source: zod
+          .object({
+            documentId: zod.string().optional(),
+            chunkId: zod.string().optional(),
+            pageNumber: zod.number().optional(),
+          })
+          .optional(),
       }),
     )
     .optional(),
@@ -385,6 +434,13 @@ export const GenerateQuizResponse = zod.object({
         .min(generateQuizResponseQuestionsItemCorrectAnswerMin)
         .max(generateQuizResponseQuestionsItemCorrectAnswerMax),
       explanation: zod.string(),
+      source: zod
+        .object({
+          documentId: zod.string().optional(),
+          chunkId: zod.string().optional(),
+          pageNumber: zod.number().optional(),
+        })
+        .optional(),
     }),
   ),
 });

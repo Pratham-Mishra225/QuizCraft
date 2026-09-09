@@ -39,5 +39,5 @@ export const generalApiLimiter = rateLimit({
   standardHeaders: "draft-7",
   legacyHeaders: false,
   handler: tooManyRequestsHandler,
-  skip: (req) => req.path === "/healthz",
+  skip: (req) => req.path === "/healthz" || req.path === "/readyz",
 });

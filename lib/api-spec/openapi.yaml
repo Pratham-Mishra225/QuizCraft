@@ -445,6 +445,17 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/QuizQuestion"
+        sourceType:
+          type: string
+          enum: [manual, topic-ai, pdf-ai]
+          default: manual
+        sourceMetadata:
+          type: object
+          nullable: true
+        visibility:
+          type: string
+          enum: [private, public]
+          default: private
       required:
         - title
         - questions
@@ -464,6 +475,15 @@ components:
             $ref: "#/components/schemas/QuizQuestion"
         createdBy:
           type: string
+        sourceType:
+          type: string
+          enum: [manual, topic-ai, pdf-ai]
+        sourceMetadata:
+          type: object
+          nullable: true
+        visibility:
+          type: string
+          enum: [private, public]
         createdAt:
           type: string
       required:
@@ -471,7 +491,35 @@ components:
         - title
         - questions
         - createdBy
+        - sourceType
+        - visibility
         - createdAt
+
+    QuestionSnapshot:
+      type: object
+      properties:
+        questionIndex:
+          type: integer
+        question:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+          minItems: 4
+          maxItems: 4
+        correctAnswer:
+          type: integer
+          minimum: 0
+          maximum: 3
+        explanation:
+          type: string
+      required:
+        - questionIndex
+        - question
+        - options
+        - correctAnswer
+        - explanation
 
     AnswerItem:
       type: object
@@ -480,6 +528,8 @@ components:
           type: integer
         selectedOption:
           type: integer
+        isCorrect:
+          type: boolean
       required:
         - questionIndex
         - selectedOption
@@ -505,6 +555,10 @@ components:
           type: string
         userId:
           type: string
+        questionSnapshot:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuestionSnapshot"
         answers:
           type: array
           items:

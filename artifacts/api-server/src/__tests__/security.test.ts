@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import request from "supertest";
 import jwt from "jsonwebtoken";
+import { Types } from "mongoose";
 import app from "../app.js";
 import { connectToMongoDB, closeMongoDB } from "../db/mongodb.js";
 import { User } from "../models/User.js";
@@ -985,3 +986,461 @@ describe("Stage 5: Cookie-Based Authentication", () => {
     });
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6. STAGE 6: QUIZ & ATTEMPT DATA MODEL REDESIGN
+// ═══════════════════════════════════════════════════════════════════════════
+describe("Stage 6: Quiz & Attempt Data Model Redesign", () => {
+    let userACookie: string;
+    let userAId: string;
+    let userBCookie: string;
+    let userBId: string;
+
+    beforeAll(async () => {
+      await connectToMongoDB();
+      await User.deleteMany({ email: { $regex: /@stage6test\.com$/ } });
+      await Quiz.deleteMany({ title: { $regex: /Stage 6 Test/ } });
+      await Attempt.deleteMany({ quizTitle: { $regex: /Stage 6 Test/ } });
+    });
+
+    afterAll(async () => {
+      await User.deleteMany({ email: { $regex: /@stage6test\.com$/ } });
+      await Quiz.deleteMany({ title: { $regex: /Stage 6 Test/ } });
+      await Attempt.deleteMany({ quizTitle: { $regex: /Stage 6 Test/ } });
+      await closeMongoDB();
+    });
+
+    beforeEach(async () => {
+      await User.deleteMany({ email: { $regex: /@stage6test\.com$/ } });
+      await Quiz.deleteMany({ title: { $regex: /Stage 6 Test/ } });
+      await Attempt.deleteMany({ quizTitle: { $regex: /Stage 6 Test/ } });
+
+      const resA = await request(app)
+        .post("/api/auth/register")
+        .send({
+          username: "stage6_usera",
+          email: "usera@stage6test.com",
+          password: "password123",
+        });
+      userACookie = extractCookie(resA);
+      userAId = resA.body.user.id;
+
+      const resB = await request(app)
+        .post("/api/auth/register")
+        .send({
+          username: "stage6_userb",
+          email: "userb@stage6test.com",
+          password: "password123",
+        });
+      userBCookie = extractCookie(resB);
+      userBId = resB.body.user.id;
+    });
+
+    // ─── A. Quiz Model: sourceType, visibility, sourceMetadata ─────────────────
+    describe("Quiz Model: sourceType, visibility, sourceMetadata", () => {
+      it("defaults to sourceType=manual, visibility=private, sourceMetadata=null when not provided", async () => {
+        const res = await request(app)
+          .post("/api/quizzes")
+          .set("Cookie", userACookie)
+          .send({
+            title: "Stage 6 Test Default Quiz",
+            questions: [
+              { question: "What is 2+2?", options: ["1", "2", "3", "4"], correctAnswer: 3, explanation: "Math" },
+            ],
+          });
+
+        expect(res.status).toBe(201);
+        expect(res.body.sourceType).toBe("manual");
+        expect(res.body.visibility).toBe("private");
+        expect(res.body.sourceMetadata).toBeNull();
+      });
+
+      it("persists explicit sourceType=topic-ai with sourceMetadata", async () => {
+        const res = await request(app)
+          .post("/api/quizzes")
+          .set("Cookie", userACookie)
+          .send({
+            title: "Stage 6 Test AI Quiz",
+            sourceType: "topic-ai",
+            sourceMetadata: { topic: "Operating Systems", difficulty: "medium" },
+            visibility: "private",
+            questions: [
+              { question: "What is a deadlock?", options: ["A", "B", "C", "D"], correctAnswer: 0, explanation: "Resource contention" },
+            ],
+          });
+
+        expect(res.status).toBe(201);
+        expect(res.body.sourceType).toBe("topic-ai");
+        expect(res.body.sourceMetadata).toEqual({ topic: "Operating Systems", difficulty: "medium" });
+        expect(res.body.visibility).toBe("private");
+      });
+
+      it("rejects invalid sourceType with 400", async () => {
+        const res = await request(app)
+          .post("/api/quizzes")
+          .set("Cookie", userACookie)
+          .send({
+            title: "Stage 6 Test Invalid Source",
+            sourceType: "invalid-source-type",
+            questions: [
+              { question: "Q?", options: ["A", "B", "C", "D"], correctAnswer: 0, explanation: "E" },
+            ],
+          });
+
+        expect(res.status).toBe(400);
+        expect(res.body.message).toBe("Validation error");
+      });
+
+      it("rejects invalid visibility with 400", async () => {
+        const res = await request(app)
+          .post("/api/quizzes")
+          .set("Cookie", userACookie)
+          .send({
+            title: "Stage 6 Test Invalid Visibility",
+            visibility: "unlisted",
+            questions: [
+              { question: "Q?", options: ["A", "B", "C", "D"], correctAnswer: 0, explanation: "E" },
+            ],
+          });
+
+        expect(res.status).toBe(400);
+        expect(res.body.message).toBe("Validation error");
+      });
+    });
+
+    // ─── B. Historical Snapshotting on Submission ──────────────────────────────
+    describe("Historical Snapshotting & Authoritative Scoring", () => {
+      it("creates an immutable questionSnapshot containing complete question data and server-calculated isCorrect", async () => {
+        const quizRes = await request(app)
+          .post("/api/quizzes")
+          .set("Cookie", userACookie)
+          .send({
+            title: "Stage 6 Test JavaScript Basics",
+            questions: [
+              {
+                question: "What is JavaScript?",
+                options: ["Programming Language", "Coffee Brand", "Car Model", "Operating System"],
+                correctAnswer: 0,
+                explanation: "JS is a high-level programming language.",
+              },
+              {
+                question: "Which keyword declares a constant in modern JS?",
+                options: ["var", "let", "const", "def"],
+                correctAnswer: 2,
+                explanation: "const defines a block-scoped constant.",
+              },
+            ],
+          });
+        expect(quizRes.status).toBe(201);
+        const quizId = quizRes.body.id;
+
+        // Submit answers: Q0 correct (0), Q1 incorrect (1 instead of 2)
+        const submitRes = await request(app)
+          .post(`/api/quizzes/${quizId}/submit`)
+          .set("Cookie", userACookie)
+          .send({
+            answers: [
+              { questionIndex: 0, selectedOption: 0 },
+              { questionIndex: 1, selectedOption: 1 },
+            ],
+          });
+
+        expect(submitRes.status).toBe(201);
+        expect(submitRes.body.score).toBe(1);
+        expect(submitRes.body.totalQuestions).toBe(2);
+        expect(submitRes.body.quizTitle).toBe("Stage 6 Test JavaScript Basics");
+        expect(submitRes.body.userId).toBe(userAId);
+
+        // Verify questionSnapshot in response
+        expect(submitRes.body.questionSnapshot).toBeDefined();
+        expect(submitRes.body.questionSnapshot.length).toBe(2);
+
+        const snap0 = submitRes.body.questionSnapshot[0];
+        expect(snap0.questionIndex).toBe(0);
+        expect(snap0.question).toBe("What is JavaScript?");
+        expect(snap0.options).toEqual(["Programming Language", "Coffee Brand", "Car Model", "Operating System"]);
+        expect(snap0.correctAnswer).toBe(0);
+        expect(snap0.explanation).toBe("JS is a high-level programming language.");
+
+        const snap1 = submitRes.body.questionSnapshot[1];
+        expect(snap1.questionIndex).toBe(1);
+        expect(snap1.question).toBe("Which keyword declares a constant in modern JS?");
+        expect(snap1.correctAnswer).toBe(2);
+
+        // Verify answers contain server-calculated isCorrect
+        expect(submitRes.body.answers[0].isCorrect).toBe(true);
+        expect(submitRes.body.answers[1].isCorrect).toBe(false);
+
+        // Verify direct retrieval from DB also contains full snapshot
+        const dbAttempt = await Attempt.findById(submitRes.body.id).lean();
+        expect(dbAttempt).toBeDefined();
+        expect(dbAttempt?.questionSnapshot.length).toBe(2);
+        expect(dbAttempt?.answers[0].isCorrect).toBe(true);
+        expect(dbAttempt?.answers[1].isCorrect).toBe(false);
+      });
+    });
+
+    // ─── C. Historical Integrity: Quiz Modification Resilience ────────────────
+    describe("Historical Integrity: Quiz Modification Resilience", () => {
+      it("preserves original attempt title, questions, options, and answers after quiz is modified", async () => {
+        // 1. Create initial quiz
+        const createRes = await request(app)
+          .post("/api/quizzes")
+          .set("Cookie", userACookie)
+          .send({
+            title: "Stage 6 Test JavaScript Basics",
+            questions: [
+              {
+                question: "What is JavaScript?",
+                options: ["Language", "Coffee", "Car", "OS"],
+                correctAnswer: 0,
+                explanation: "It is a programming language.",
+              },
+            ],
+          });
+        const quizId = createRes.body.id;
+
+        // 2. Submit quiz attempt
+        const submitRes = await request(app)
+          .post(`/api/quizzes/${quizId}/submit`)
+          .set("Cookie", userACookie)
+          .send({
+            answers: [{ questionIndex: 0, selectedOption: 0 }],
+          });
+        expect(submitRes.status).toBe(201);
+        const attemptId = submitRes.body.id;
+
+        // 3. Owner edits the quiz: changes title, question text, options, and correctAnswer
+        const updateRes = await request(app)
+          .put(`/api/quizzes/${quizId}`)
+          .set("Cookie", userACookie)
+          .send({
+            title: "Stage 6 Test Advanced JavaScript",
+            questions: [
+              {
+                question: "What is a closure in V8?",
+                options: ["Lexical env capture", "Garbage collection", "JIT compiler", "Event loop"],
+                correctAnswer: 0,
+                explanation: "Closure captures outer lexical scope.",
+              },
+            ],
+          });
+        expect(updateRes.status).toBe(200);
+        expect(updateRes.body.title).toBe("Stage 6 Test Advanced JavaScript");
+
+        // 4. Retrieve original attempt
+        const getAttemptRes = await request(app)
+          .get(`/api/attempts/${attemptId}`)
+          .set("Cookie", userACookie);
+
+        expect(getAttemptRes.status).toBe(200);
+        // Original quiz title preserved
+        expect(getAttemptRes.body.quizTitle).toBe("Stage 6 Test JavaScript Basics");
+        // Original question preserved
+        expect(getAttemptRes.body.questionSnapshot[0].question).toBe("What is JavaScript?");
+        expect(getAttemptRes.body.questionSnapshot[0].options).toEqual(["Language", "Coffee", "Car", "OS"]);
+        expect(getAttemptRes.body.questionSnapshot[0].explanation).toBe("It is a programming language.");
+        expect(getAttemptRes.body.score).toBe(1);
+      });
+    });
+
+    // ─── D. Historical Integrity: Quiz Deletion Resilience ────────────────────
+    describe("Historical Integrity: Quiz Deletion Resilience", () => {
+      it("retains complete attempt result with snapshot even after original quiz is permanently deleted", async () => {
+        // 1. Create quiz
+        const createRes = await request(app)
+          .post("/api/quizzes")
+          .set("Cookie", userACookie)
+          .send({
+            title: "Stage 6 Test Ephemeral Quiz",
+            questions: [
+              {
+                question: "Is this temporary?",
+                options: ["Yes", "No", "Maybe", "Always"],
+                correctAnswer: 0,
+                explanation: "Will be deleted.",
+              },
+            ],
+          });
+        const quizId = createRes.body.id;
+
+        // 2. Submit attempt
+        const submitRes = await request(app)
+          .post(`/api/quizzes/${quizId}/submit`)
+          .set("Cookie", userACookie)
+          .send({
+            answers: [{ questionIndex: 0, selectedOption: 0 }],
+          });
+        expect(submitRes.status).toBe(201);
+        const attemptId = submitRes.body.id;
+
+        // 3. Delete the quiz
+        const deleteRes = await request(app)
+          .delete(`/api/quizzes/${quizId}`)
+          .set("Cookie", userACookie);
+        expect(deleteRes.status).toBe(200);
+
+        // Confirm quiz is gone
+        const checkQuizRes = await request(app)
+          .get(`/api/quizzes/${quizId}`)
+          .set("Cookie", userACookie);
+        expect(checkQuizRes.status).toBe(404);
+
+        // 4. Retrieve attempt: must still succeed and contain all historical data
+        const getAttemptRes = await request(app)
+          .get(`/api/attempts/${attemptId}`)
+          .set("Cookie", userACookie);
+
+        expect(getAttemptRes.status).toBe(200);
+        expect(getAttemptRes.body.id).toBe(attemptId);
+        expect(getAttemptRes.body.quizTitle).toBe("Stage 6 Test Ephemeral Quiz");
+        expect(getAttemptRes.body.questionSnapshot.length).toBe(1);
+        expect(getAttemptRes.body.questionSnapshot[0].question).toBe("Is this temporary?");
+        expect(getAttemptRes.body.questionSnapshot[0].options).toEqual(["Yes", "No", "Maybe", "Always"]);
+        expect(getAttemptRes.body.score).toBe(1);
+        expect(getAttemptRes.body.totalQuestions).toBe(1);
+      });
+    });
+
+    // ─── E. Attempt Authorization & Identity Security ─────────────────────────
+    describe("Attempt Authorization & Identity Security", () => {
+      it("prevents User B from accessing User A's attempt details (IDOR)", async () => {
+        const createRes = await request(app)
+          .post("/api/quizzes")
+          .set("Cookie", userACookie)
+          .send({
+            title: "Stage 6 Test Private Attempt Quiz",
+            questions: [
+              { question: "Q1?", options: ["A", "B", "C", "D"], correctAnswer: 0, explanation: "E" },
+            ],
+          });
+
+        const submitRes = await request(app)
+          .post(`/api/quizzes/${createRes.body.id}/submit`)
+          .set("Cookie", userACookie)
+          .send({
+            answers: [{ questionIndex: 0, selectedOption: 0 }],
+          });
+        const attemptId = submitRes.body.id;
+
+        // User B attempts to access User A's attempt
+        const getRes = await request(app)
+          .get(`/api/attempts/${attemptId}`)
+          .set("Cookie", userBCookie);
+
+        expect(getRes.status).toBe(404);
+      });
+
+      it("ignores client spoofing of userId, score, isCorrect, questionSnapshot, and quizTitle", async () => {
+        const createRes = await request(app)
+          .post("/api/quizzes")
+          .set("Cookie", userACookie)
+          .send({
+            title: "Stage 6 Test Real Title",
+            questions: [
+              { question: "Q1?", options: ["A", "B", "C", "D"], correctAnswer: 0, explanation: "Real" },
+            ],
+          });
+
+        // Malicious client sends invalid answer (option 1 is wrong), but attempts to spoof score, isCorrect, userId, title
+        const submitRes = await request(app)
+          .post(`/api/quizzes/${createRes.body.id}/submit`)
+          .set("Cookie", userACookie)
+          .send({
+            userId: userBId,
+            score: 100,
+            quizTitle: "Spoofed Title",
+            questionSnapshot: [{ question: "Spoofed Question" }],
+            answers: [{ questionIndex: 0, selectedOption: 1, isCorrect: true, score: 999 }],
+          });
+
+        expect(submitRes.status).toBe(201);
+        // Server enforced real authenticated user
+        expect(submitRes.body.userId).toBe(userAId);
+        // Server evaluated score correctly (0, since option 1 != 0)
+        expect(submitRes.body.score).toBe(0);
+        // Server evaluated isCorrect correctly
+        expect(submitRes.body.answers[0].isCorrect).toBe(false);
+        // Server preserved authoritative quiz title
+        expect(submitRes.body.quizTitle).toBe("Stage 6 Test Real Title");
+        // Server stored real question in snapshot
+        expect(submitRes.body.questionSnapshot[0].question).toBe("Q1?");
+      });
+    });
+
+    // ─── F. Edge Cases & Legacy Compatibility ─────────────────────────────────
+    describe("Edge Cases & Legacy Compatibility", () => {
+      it("handles single-question quiz with 100% score", async () => {
+        const createRes = await request(app)
+          .post("/api/quizzes")
+          .set("Cookie", userACookie)
+          .send({
+            title: "Stage 6 Test Single Question",
+            questions: [
+              { question: "Q?", options: ["A", "B", "C", "D"], correctAnswer: 3, explanation: "D" },
+            ],
+          });
+
+        const submitRes = await request(app)
+          .post(`/api/quizzes/${createRes.body.id}/submit`)
+          .set("Cookie", userACookie)
+          .send({
+            answers: [{ questionIndex: 0, selectedOption: 3 }],
+          });
+
+        expect(submitRes.status).toBe(201);
+        expect(submitRes.body.score).toBe(1);
+        expect(submitRes.body.totalQuestions).toBe(1);
+        expect(submitRes.body.answers[0].isCorrect).toBe(true);
+      });
+
+      it("handles multi-question quiz with 0% score (all incorrect)", async () => {
+        const createRes = await request(app)
+          .post("/api/quizzes")
+          .set("Cookie", userACookie)
+          .send({
+            title: "Stage 6 Test Zero Score",
+            questions: [
+              { question: "Q1?", options: ["A", "B", "C", "D"], correctAnswer: 0, explanation: "A" },
+              { question: "Q2?", options: ["A", "B", "C", "D"], correctAnswer: 1, explanation: "B" },
+            ],
+          });
+
+        const submitRes = await request(app)
+          .post(`/api/quizzes/${createRes.body.id}/submit`)
+          .set("Cookie", userACookie)
+          .send({
+            answers: [
+              { questionIndex: 0, selectedOption: 2 },
+              { questionIndex: 1, selectedOption: 3 },
+            ],
+          });
+
+        expect(submitRes.status).toBe(201);
+        expect(submitRes.body.score).toBe(0);
+        expect(submitRes.body.answers[0].isCorrect).toBe(false);
+        expect(submitRes.body.answers[1].isCorrect).toBe(false);
+      });
+
+      it("safely retrieves legacy attempt documents without questionSnapshot without crashing", async () => {
+        // Directly insert a legacy attempt in MongoDB without questionSnapshot
+        const legacyAttempt = await Attempt.create({
+          quizId: new Types.ObjectId(),
+          quizTitle: "Stage 6 Test Legacy Attempt",
+          userId: new Types.ObjectId(userAId),
+          answers: [{ questionIndex: 0, selectedOption: 1, isCorrect: false }],
+          score: 0,
+          totalQuestions: 1,
+          completedAt: new Date(),
+        });
+
+        const getRes = await request(app)
+          .get(`/api/attempts/${legacyAttempt._id}`)
+          .set("Cookie", userACookie);
+
+        expect(getRes.status).toBe(200);
+        expect(getRes.body.quizTitle).toBe("Stage 6 Test Legacy Attempt");
+        expect(Array.isArray(getRes.body.questionSnapshot)).toBe(true);
+      });
+    });
+  });

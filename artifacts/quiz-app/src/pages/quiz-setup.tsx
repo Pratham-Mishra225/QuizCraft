@@ -94,6 +94,10 @@ export default function QuizSetupPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [expandedExplanations, setExpandedExplanations] = useState<Record<number, boolean>>({});
+  const [creationSource, setCreationSource] = useState<{
+    sourceType: "manual" | "topic-ai" | "pdf-ai";
+    sourceMetadata: Record<string, unknown> | null;
+  }>({ sourceType: "manual", sourceMetadata: null });
 
   const generateMutation = useGenerateQuiz();
   const createQuizMutation = useCreateQuiz();
@@ -133,6 +137,10 @@ export default function QuizSetupPage() {
             explanation: q.explanation,
           }));
           replace(generated);
+          setCreationSource({
+            sourceType: "topic-ai",
+            sourceMetadata: { topic: aiTopic.trim(), difficulty: aiDifficulty, numberOfQuestions: aiCount },
+          });
           if (!form.getValues("title")) {
             form.setValue("title", `${aiTopic} Quiz`);
             form.setValue(
@@ -228,7 +236,14 @@ export default function QuizSetupPage() {
 
   const onSubmit = (data: QuizFormValues) => {
     createQuizMutation.mutate(
-      { data },
+      {
+        data: {
+          ...data,
+          sourceType: creationSource.sourceType,
+          sourceMetadata: creationSource.sourceMetadata,
+          visibility: "private",
+        },
+      },
       {
         onSuccess: (res) => {
           queryClient.invalidateQueries({ queryKey: getGetQuizzesQueryKey() });

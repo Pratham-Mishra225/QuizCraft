@@ -276,8 +276,9 @@ Example output:
           explanation: q.explanation,
         })),
         createdBy: req.userId,
-        quizType: "pdf",
-        sourceFileName: originalName,
+        sourceType: "pdf-ai",
+        sourceMetadata: { fileName: originalName },
+        visibility: "private",
       });
 
       res.status(201).json({ id: (quiz._id as object).toString(), title: quiz.title });

@@ -1,9 +1,8 @@
-import { Router } from "express";
+import { Router, Response } from "express";
 import jwt from "jsonwebtoken";
 import { User } from "../models/User.js";
 import { requireAuth, AuthRequest } from "../middlewares/auth.js";
-import { RegisterBody, LoginBody } from "@workspace/api-zod";
-import { Response } from "express";
+import { RegisterSchema, LoginSchema } from "../schemas/auth.js";
 import { env } from "../config/env.js";
 import { authLimiter } from "../middlewares/rateLimit.js";
 
@@ -14,7 +13,7 @@ function signToken(userId: string): string {
 }
 
 router.post("/register", authLimiter, async (req, res: Response) => {
-  const parsed = RegisterBody.safeParse(req.body);
+  const parsed = RegisterSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ message: "Validation error", errors: parsed.error.flatten() });
     return;
@@ -22,13 +21,19 @@ router.post("/register", authLimiter, async (req, res: Response) => {
 
   const { username, email, password } = parsed.data;
 
-  const existing = await User.findOne({ $or: [{ email }, { username }] });
+  const existing = await User.findOne({
+    $or: [{ email: email.toLowerCase() }, { username }],
+  });
   if (existing) {
     res.status(400).json({ message: "Email or username already taken" });
     return;
   }
 
-  const user = await User.create({ username, email, password });
+  const user = await User.create({
+    username,
+    email: email.toLowerCase(),
+    password,
+  });
   const token = signToken(String(user._id));
 
   res.status(201).json({
@@ -38,14 +43,14 @@ router.post("/register", authLimiter, async (req, res: Response) => {
 });
 
 router.post("/login", authLimiter, async (req, res: Response) => {
-  const parsed = LoginBody.safeParse(req.body);
+  const parsed = LoginSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ message: "Validation error" });
+    res.status(400).json({ message: "Validation error", errors: parsed.error.flatten() });
     return;
   }
 
   const { email, password } = parsed.data;
-  const user = await User.findOne({ email });
+  const user = await User.findOne({ email: email.toLowerCase() });
   if (!user || !(await user.comparePassword(password))) {
     res.status(401).json({ message: "Invalid credentials" });
     return;

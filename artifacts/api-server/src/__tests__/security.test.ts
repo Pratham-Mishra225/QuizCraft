@@ -1444,3 +1444,221 @@ describe("Stage 6: Quiz & Attempt Data Model Redesign", () => {
       });
     });
   });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 7. STAGE 7: PROPER RESULT REVIEW
+  // ═══════════════════════════════════════════════════════════════════════════
+  describe("Stage 7: Proper Result Review", () => {
+    let userACookie: string;
+    let userAId: string;
+    let userBCookie: string;
+    let userBId: string;
+
+    beforeAll(async () => {
+      await connectToMongoDB();
+      await User.deleteMany({ email: { $regex: /@stage7test\.com$/ } });
+      await Quiz.deleteMany({ title: { $regex: /Stage 7 Test/ } });
+      await Attempt.deleteMany({ quizTitle: { $regex: /Stage 7 Test/ } });
+    });
+
+    afterAll(async () => {
+      await User.deleteMany({ email: { $regex: /@stage7test\.com$/ } });
+      await Quiz.deleteMany({ title: { $regex: /Stage 7 Test/ } });
+      await Attempt.deleteMany({ quizTitle: { $regex: /Stage 7 Test/ } });
+      await closeMongoDB();
+    });
+
+    beforeEach(async () => {
+      await User.deleteMany({ email: { $regex: /@stage7test\.com$/ } });
+      await Quiz.deleteMany({ title: { $regex: /Stage 7 Test/ } });
+      await Attempt.deleteMany({ quizTitle: { $regex: /Stage 7 Test/ } });
+
+      const resA = await request(app)
+        .post("/api/auth/register")
+        .send({
+          username: "stage7_usera",
+          email: "usera@stage7test.com",
+          password: "password123",
+        });
+      userACookie = extractCookie(resA);
+      userAId = resA.body.user.id;
+
+      const resB = await request(app)
+        .post("/api/auth/register")
+        .send({
+          username: "stage7_userb",
+          email: "userb@stage7test.com",
+          password: "password123",
+        });
+      userBCookie = extractCookie(resB);
+      userBId = resB.body.user.id;
+    });
+
+    it("provides complete question snapshot, options, answers, correctness, and explanations for result review", async () => {
+      const quizRes = await request(app)
+        .post("/api/quizzes")
+        .set("Cookie", userACookie)
+        .send({
+          title: "Stage 7 Test Web Protocols",
+          questions: [
+            {
+              question: "What does HTTP stand for?",
+              options: [
+                "HyperText Transfer Protocol",
+                "High Tech Tool Path",
+                "Hyper Transfer Text Program",
+                "Home Terminal Test Port",
+              ],
+              correctAnswer: 0,
+              explanation: "HTTP stands for HyperText Transfer Protocol.",
+            },
+            {
+              question: "Which protocol is used for secure HTTP?",
+              options: ["FTP", "HTTPS", "SMTP", "SSH"],
+              correctAnswer: 1,
+              explanation: "HTTPS is HTTP secured using TLS/SSL.",
+            },
+          ],
+        });
+      expect(quizRes.status).toBe(201);
+      const quizId = quizRes.body.id;
+
+      // Submit: Q0 correct (0), Q1 incorrect (0 instead of 1)
+      const submitRes = await request(app)
+        .post(`/api/quizzes/${quizId}/submit`)
+        .set("Cookie", userACookie)
+        .send({
+          answers: [
+            { questionIndex: 0, selectedOption: 0 },
+            { questionIndex: 1, selectedOption: 0 },
+          ],
+        });
+      expect(submitRes.status).toBe(201);
+      const attemptId = submitRes.body.id;
+
+      // Fetch attempt result for review
+      const reviewRes = await request(app)
+        .get(`/api/attempts/${attemptId}`)
+        .set("Cookie", userACookie);
+
+      expect(reviewRes.status).toBe(200);
+      expect(reviewRes.body.id).toBe(attemptId);
+      expect(reviewRes.body.quizTitle).toBe("Stage 7 Test Web Protocols");
+      expect(reviewRes.body.score).toBe(1);
+      expect(reviewRes.body.totalQuestions).toBe(2);
+
+      // Verify questionSnapshot structure
+      expect(reviewRes.body.questionSnapshot.length).toBe(2);
+      expect(reviewRes.body.questionSnapshot[0].question).toBe("What does HTTP stand for?");
+      expect(reviewRes.body.questionSnapshot[0].options[0]).toBe("HyperText Transfer Protocol");
+      expect(reviewRes.body.questionSnapshot[0].correctAnswer).toBe(0);
+      expect(reviewRes.body.questionSnapshot[0].explanation).toBe("HTTP stands for HyperText Transfer Protocol.");
+
+      expect(reviewRes.body.questionSnapshot[1].question).toBe("Which protocol is used for secure HTTP?");
+      expect(reviewRes.body.questionSnapshot[1].correctAnswer).toBe(1);
+      expect(reviewRes.body.questionSnapshot[1].explanation).toBe("HTTPS is HTTP secured using TLS/SSL.");
+
+      // Verify evaluated answers
+      expect(reviewRes.body.answers[0].selectedOption).toBe(0);
+      expect(reviewRes.body.answers[0].isCorrect).toBe(true);
+      expect(reviewRes.body.answers[1].selectedOption).toBe(0);
+      expect(reviewRes.body.answers[1].isCorrect).toBe(false);
+    });
+
+    it("maintains historical result review accuracy after quiz editing and quiz deletion", async () => {
+      // 1. Create quiz
+      const quizRes = await request(app)
+        .post("/api/quizzes")
+        .set("Cookie", userACookie)
+        .send({
+          title: "Stage 7 Test Initial Topic",
+          questions: [
+            {
+              question: "Original Question 1?",
+              options: ["Opt A", "Opt B", "Opt C", "Opt D"],
+              correctAnswer: 2,
+              explanation: "Original Explanation 1",
+            },
+          ],
+        });
+      const quizId = quizRes.body.id;
+
+      // 2. Submit quiz
+      const submitRes = await request(app)
+        .post(`/api/quizzes/${quizId}/submit`)
+        .set("Cookie", userACookie)
+        .send({
+          answers: [{ questionIndex: 0, selectedOption: 2 }],
+        });
+      const attemptId = submitRes.body.id;
+
+      // 3. Edit quiz
+      await request(app)
+        .put(`/api/quizzes/${quizId}`)
+        .set("Cookie", userACookie)
+        .send({
+          title: "Stage 7 Test Edited Topic",
+          questions: [
+            {
+              question: "Completely Changed Question?",
+              options: ["New 1", "New 2", "New 3", "New 4"],
+              correctAnswer: 0,
+              explanation: "Completely Changed Explanation",
+            },
+          ],
+        });
+
+      // 4. Verify review still shows original snapshot
+      const reviewAfterEdit = await request(app)
+        .get(`/api/attempts/${attemptId}`)
+        .set("Cookie", userACookie);
+
+      expect(reviewAfterEdit.status).toBe(200);
+      expect(reviewAfterEdit.body.quizTitle).toBe("Stage 7 Test Initial Topic");
+      expect(reviewAfterEdit.body.questionSnapshot[0].question).toBe("Original Question 1?");
+      expect(reviewAfterEdit.body.questionSnapshot[0].options).toEqual(["Opt A", "Opt B", "Opt C", "Opt D"]);
+      expect(reviewAfterEdit.body.questionSnapshot[0].explanation).toBe("Original Explanation 1");
+      expect(reviewAfterEdit.body.score).toBe(1);
+
+      // 5. Delete quiz
+      await request(app)
+        .delete(`/api/quizzes/${quizId}`)
+        .set("Cookie", userACookie);
+
+      // 6. Verify review still works independently
+      const reviewAfterDelete = await request(app)
+        .get(`/api/attempts/${attemptId}`)
+        .set("Cookie", userACookie);
+
+      expect(reviewAfterDelete.status).toBe(200);
+      expect(reviewAfterDelete.body.quizTitle).toBe("Stage 7 Test Initial Topic");
+      expect(reviewAfterDelete.body.questionSnapshot[0].question).toBe("Original Question 1?");
+      expect(reviewAfterDelete.body.score).toBe(1);
+    });
+
+    it("strictly prevents User B from accessing User A's result review", async () => {
+      const quizRes = await request(app)
+        .post("/api/quizzes")
+        .set("Cookie", userACookie)
+        .send({
+          title: "Stage 7 Test Private Review",
+          questions: [
+            { question: "Private Q?", options: ["1", "2", "3", "4"], correctAnswer: 0, explanation: "Private" },
+          ],
+        });
+
+      const submitRes = await request(app)
+        .post(`/api/quizzes/${quizRes.body.id}/submit`)
+        .set("Cookie", userACookie)
+        .send({
+          answers: [{ questionIndex: 0, selectedOption: 0 }],
+        });
+
+      const getRes = await request(app)
+        .get(`/api/attempts/${submitRes.body.id}`)
+        .set("Cookie", userBCookie);
+
+      expect(getRes.status).toBe(404);
+      expect(getRes.body.message).toBe("Attempt not found");
+    });
+  });

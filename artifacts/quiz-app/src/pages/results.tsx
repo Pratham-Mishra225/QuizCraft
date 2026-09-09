@@ -118,17 +118,18 @@ export default function ResultsPage() {
                           </div>
                         </div>
                         
-                        <div className="flex items-center gap-6 ml-2 sm:ml-0">
+                        <div className="flex items-center gap-5 ml-2 sm:ml-0">
                           <div className="text-right">
                             <div className="text-2xl font-bold tracking-tight">
                               {attempt.score} <span className="text-base font-normal text-muted-foreground">/ {attempt.totalQuestions}</span>
                             </div>
                             <div className={`text-xs font-semibold uppercase tracking-wider ${percent >= 80 ? 'text-green-600 dark:text-green-400' : percent >= 60 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>
-                              {percent}% Score
+                              {percent}% Accuracy
                             </div>
                           </div>
-                          <div className="hidden sm:flex h-10 w-10 items-center justify-center rounded-full bg-muted/50 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                            <ArrowRight className="h-5 w-5" />
+                          <div className="hidden sm:flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-all text-xs font-semibold shrink-0">
+                            <span>Review Result</span>
+                            <ArrowRight className="h-3.5 w-3.5" />
                           </div>
                         </div>
                       </div>

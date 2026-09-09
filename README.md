@@ -35,7 +35,6 @@ graph TD
 | lib/api-client-react | Generated React Query hooks |
 | lib/api-zod | Generated Zod schemas for request validation |
 | lib/integrations-gemini-ai | Gemini AI client wrapper |
-| lib/db | Drizzle + Postgres scaffold (not wired to API server) |
 | scripts | Utility scripts |
 
 ## Tech Stack
@@ -71,14 +70,14 @@ pnpm install
 
 ### Configure Environment
 
-Create an .env file in artifacts/api-server.
+Create an `.env` file in `artifacts/api-server` (see `artifacts/api-server/.env.example` for reference):
 
 ```bash
 PORT=3000
 MONGODB_URI=mongodb://localhost:27017/quiz-master-hub
-JWT_SECRET=change-me
-AI_INTEGRATIONS_GEMINI_API_KEY=your-key
-AI_INTEGRATIONS_GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+JWT_SECRET=your-secure-random-256-bit-secret
+AI_INTEGRATIONS_GEMINI_API_KEY=your-gemini-api-key
+AI_INTEGRATIONS_GEMINI_BASE_URL=https://generativelanguage.googleapis.com
 FRONTEND_URL=http://localhost:5173
 NODE_ENV=development
 LOG_LEVEL=info

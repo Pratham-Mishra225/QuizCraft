@@ -12,7 +12,13 @@ type QuizDoc = {
   _id: Types.ObjectId;
   title: string;
   description?: string;
-  questions: { question: string; options: string[]; correctAnswer: number; explanation?: string }[];
+  questions: {
+    question: string;
+    options: string[];
+    correctAnswer: number;
+    explanation?: string;
+    source?: { documentId?: string; chunkId?: string; pageNumber?: number } | null;
+  }[];
   createdBy: Types.ObjectId;
   sourceType?: string;
   sourceMetadata?: Record<string, unknown> | null;
@@ -20,6 +26,7 @@ type QuizDoc = {
   shareId: string;
   createdAt: Date;
 };
+
 
 function serializePublicQuiz(q: QuizDoc) {
   return {

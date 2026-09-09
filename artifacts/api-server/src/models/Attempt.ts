@@ -1,11 +1,19 @@
 import mongoose, { Document, Schema, Types } from "mongoose";
 
+export interface IQuestionSource {
+  documentId?: string;
+  chunkId?: string;
+  pageNumber?: number;
+}
+
+
 export interface IQuestionSnapshot {
   questionIndex: number;
   question: string;
   options: string[];
   correctAnswer: number;
   explanation?: string;
+  source?: IQuestionSource | null;
 }
 
 export interface IAnswer {
@@ -27,6 +35,15 @@ export interface IAttempt extends Document {
   updatedAt: Date;
 }
 
+const QuestionSourceSchema = new Schema<IQuestionSource>(
+  {
+    documentId: { type: String, default: "" },
+    chunkId: { type: String, default: "" },
+    pageNumber: { type: Number, default: 0 },
+  },
+  { _id: false }
+);
+
 const QuestionSnapshotSchema = new Schema<IQuestionSnapshot>(
   {
     questionIndex: { type: Number, required: true },
@@ -34,9 +51,11 @@ const QuestionSnapshotSchema = new Schema<IQuestionSnapshot>(
     options: { type: [String], required: true },
     correctAnswer: { type: Number, required: true },
     explanation: { type: String, default: "" },
+    source: { type: QuestionSourceSchema, default: null },
   },
   { _id: false }
 );
+
 
 const AnswerSchema = new Schema<IAnswer>(
   {

@@ -7,6 +7,13 @@ import { connectToMongoDB, closeMongoDB } from "../db/mongodb.js";
 import { User } from "../models/User.js";
 import { Quiz } from "../models/Quiz.js";
 import { Attempt } from "../models/Attempt.js";
+import { DocumentModel } from "../models/Document.js";
+import { DocumentChunk } from "../models/DocumentChunk.js";
+import { extractPagesFromPdf } from "../services/pdf/extract.js";
+import { cleanPageText } from "../services/pdf/clean.js";
+import { chunkPages } from "../services/pdf/chunk.js";
+import { cosineSimilarity, storeChunks, searchSimilarChunks } from "../services/retrieval/vectorStore.js";
+import { diversifyChunks } from "../services/retrieval/retrieve.js";
 
 // ─── Cookie helpers ──────────────────────────────────────────────────────────
 // supertest does not automatically carry Set-Cookie back to subsequent requests
@@ -2119,6 +2126,399 @@ describe("Stage 8: Public / Private Quiz Sharing", () => {
     expect(attemptRes.body.score).toBe(2);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 9. STAGE 9: PDF PIPELINE V2 / RAG
+// ═══════════════════════════════════════════════════════════════════════════
+describe("Stage 9: PDF Pipeline v2 / RAG", () => {
+  let userACookie: string;
+  let userAId: string;
+  let userBCookie: string;
+  let userBId: string;
+
+  // Helper to dynamically build a valid minimal PDF buffer with byte-exact xref table
+  const createMinimalPdfBuffer = (): Buffer => {
+    const header = "%PDF-1.4\n";
+    const o1 = "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n";
+    const o2 = "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n";
+    const o3 = "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n";
+    const o4 = "4 0 obj\n<< /Length 63 >>\nstream\nBT /F1 12 Tf 72 712 Td (Hello World Stage 9 RAG Pipeline) Tj ET\nendstream\nendobj\n";
+    const o5 = "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n";
+
+    const off1 = Buffer.byteLength(header);
+    const off2 = off1 + Buffer.byteLength(o1);
+    const off3 = off2 + Buffer.byteLength(o2);
+    const off4 = off3 + Buffer.byteLength(o3);
+    const off5 = off4 + Buffer.byteLength(o4);
+    const startXref = off5 + Buffer.byteLength(o5);
+
+    const xref =
+      "xref\n" +
+      "0 6\n" +
+      "0000000000 65535 f \r\n" +
+      String(off1).padStart(10, "0") + " 00000 n \r\n" +
+      String(off2).padStart(10, "0") + " 00000 n \r\n" +
+      String(off3).padStart(10, "0") + " 00000 n \r\n" +
+      String(off4).padStart(10, "0") + " 00000 n \r\n" +
+      String(off5).padStart(10, "0") + " 00000 n \r\n";
+
+    const trailer =
+      "trailer\n" +
+      "<< /Size 6 /Root 1 0 R >>\n" +
+      "startxref\n" +
+      String(startXref) + "\n" +
+      "%%EOF\n";
+
+    return Buffer.from(header + o1 + o2 + o3 + o4 + o5 + xref + trailer, "binary");
+  };
+
+  const samplePdfBuffer = createMinimalPdfBuffer();
+
+  beforeAll(async () => {
+    await connectToMongoDB();
+    await User.deleteMany({ email: { $regex: /@stage9test\.com$/ } });
+    await Quiz.deleteMany({ title: { $regex: /Stage 9 Test/ } });
+    await Attempt.deleteMany({ quizTitle: { $regex: /Stage 9 Test/ } });
+    await DocumentModel.deleteMany({ fileName: { $regex: /Stage 9/i } });
+  });
+
+  afterAll(async () => {
+    await User.deleteMany({ email: { $regex: /@stage9test\.com$/ } });
+    await Quiz.deleteMany({ title: { $regex: /Stage 9 Test/ } });
+    await Attempt.deleteMany({ quizTitle: { $regex: /Stage 9 Test/ } });
+    await DocumentModel.deleteMany({ fileName: { $regex: /Stage 9/i } });
+    await closeMongoDB();
+  });
+
+  beforeEach(async () => {
+    await User.deleteMany({ email: { $regex: /@stage9test\.com$/ } });
+    await Quiz.deleteMany({ title: { $regex: /Stage 9 Test/ } });
+    await Attempt.deleteMany({ quizTitle: { $regex: /Stage 9 Test/ } });
+    await DocumentModel.deleteMany({ fileName: { $regex: /Stage 9/i } });
+
+    // Register User A
+    const resA = await request(app)
+      .post("/api/auth/register")
+      .send({
+        username: "stage9_usera",
+        email: "usera@stage9test.com",
+        password: "password123",
+      });
+    userACookie = extractCookie(resA);
+    userAId = resA.body.user.id;
+
+    // Register User B
+    const resB = await request(app)
+      .post("/api/auth/register")
+      .send({
+        username: "stage9_userb",
+        email: "userb@stage9test.com",
+        password: "password123",
+      });
+    userBCookie = extractCookie(resB);
+    userBId = resB.body.user.id;
+  });
+
+  // ─── A. Unit Tests: Text Processing, Cleaning & Chunking ──────────────────
+  describe("RAG Unit Tests: Cleaning, Chunking & Math", () => {
+    it("cleanPageText strips control characters and normalizes excess whitespace", () => {
+      const rawText = "Hello\x00\x08World!   This  is   a   test.\n\n\n\nNew paragraph with \t tabs.";
+      const cleaned = cleanPageText(rawText);
+      expect(cleaned).not.toContain("\x00");
+      expect(cleaned).not.toContain("\x08");
+      expect(cleaned).toContain("HelloWorld! This is a test.");
+      expect(cleaned).toContain("New paragraph with tabs.");
+      expect(cleaned).not.toContain("\n\n\n");
+    });
+
+    it("chunkPages splits text into overlapping chunks and preserves page numbers", () => {
+      const pages = [
+        {
+          pageNumber: 1,
+          text: "First page content. ".repeat(40),
+        },
+        {
+          pageNumber: 2,
+          text: "Second page content. ".repeat(40),
+        },
+      ];
+
+      const chunks = chunkPages(pages, "doc-test-123", { chunkSize: 400, chunkOverlap: 50 });
+      expect(chunks.length).toBeGreaterThanOrEqual(4);
+
+      for (const chunk of chunks) {
+        expect(chunk.documentId).toBe("doc-test-123");
+        expect([1, 2]).toContain(chunk.pageNumber);
+        expect(chunk.chunkId).toMatch(/^chk_.*_p\d+_\d+/);
+        expect(chunk.text.length).toBeGreaterThan(0);
+      }
+
+      const page1Chunks = chunks.filter((c) => c.pageNumber === 1);
+      const page2Chunks = chunks.filter((c) => c.pageNumber === 2);
+      expect(page1Chunks.length).toBeGreaterThan(0);
+      expect(page2Chunks.length).toBeGreaterThan(0);
+    });
+
+    it("cosineSimilarity computes correct vector similarity across geometric cases", () => {
+      const v1 = [1, 2, 3, 4];
+      expect(cosineSimilarity(v1, v1)).toBeCloseTo(1.0, 5);
+
+      const vOrth1 = [1, 0];
+      const vOrth2 = [0, 1];
+      expect(cosineSimilarity(vOrth1, vOrth2)).toBeCloseTo(0.0, 5);
+
+      const vOpp1 = [1, 0];
+      const vOpp2 = [-1, 0];
+      expect(cosineSimilarity(vOpp1, vOpp2)).toBeCloseTo(-1.0, 5);
+
+      expect(cosineSimilarity([], [])).toBe(0);
+      expect(cosineSimilarity([1, 2], [1])).toBe(0);
+      expect(cosineSimilarity([0, 0], [0, 0])).toBe(0);
+    });
+
+    it("diversifyChunks selects chunks round-robin across pages to avoid single-page clustering", () => {
+      const candidateChunks = [
+        { chunkId: "c1_1", documentId: "d1", pageNumber: 1, text: "p1 text 1", score: 0.95 },
+        { chunkId: "c1_2", documentId: "d1", pageNumber: 1, text: "p1 text 2", score: 0.92 },
+        { chunkId: "c1_3", documentId: "d1", pageNumber: 1, text: "p1 text 3", score: 0.90 },
+        { chunkId: "c2_1", documentId: "d1", pageNumber: 2, text: "p2 text 1", score: 0.88 },
+        { chunkId: "c2_2", documentId: "d1", pageNumber: 2, text: "p2 text 2", score: 0.85 },
+        { chunkId: "c3_1", documentId: "d1", pageNumber: 3, text: "p3 text 1", score: 0.80 },
+      ];
+
+      const diversified = diversifyChunks(candidateChunks, 3);
+      expect(diversified.length).toBe(3);
+
+      const pageNumbers = diversified.map((c) => c.pageNumber);
+      expect(pageNumbers).toContain(1);
+      expect(pageNumbers).toContain(2);
+      expect(pageNumbers).toContain(3);
+    });
+
+    it("extractPagesFromPdf parses pages with 1-indexed numbering", async () => {
+      const extracted = await extractPagesFromPdf(samplePdfBuffer);
+      expect(extracted.pages.length).toBe(1);
+      expect(extracted.pages[0]?.pageNumber).toBe(1);
+      expect(extracted.pages[0]?.text).toContain("Hello World");
+    });
+  });
+
+
+  // ─── B. Vector Store Isolation & IDOR Protection ──────────────────────────
+  describe("Vector Store Security & IDOR Isolation", () => {
+    it("stores document chunks scoped to user and document", async () => {
+      const doc = await DocumentModel.create({
+        userId: new Types.ObjectId(userAId),
+        fileName: "Stage 9 Security Whitepaper.pdf",
+        pageCount: 2,
+        status: "ready",
+      });
+
+      const chunksToStore = [
+        {
+          chunkId: "chunk_1_0",
+          pageNumber: 1,
+          text: "Authentication is verified via HttpOnly cookies.",
+          embedding: [0.1, 0.2, 0.3],
+        },
+        {
+          chunkId: "chunk_2_0",
+          pageNumber: 2,
+          text: "Authorization checks prevent IDOR attacks.",
+          embedding: [0.4, 0.5, 0.6],
+        },
+      ];
+
+      await storeChunks(doc._id.toString(), userAId, chunksToStore);
+
+      const dbChunks = await DocumentChunk.find({ documentId: doc._id }).lean();
+      expect(dbChunks.length).toBe(2);
+      expect(dbChunks[0]?.userId.toString()).toBe(userAId);
+      expect(dbChunks[1]?.userId.toString()).toBe(userAId);
+    });
+
+    it("strictly isolates vector search: User B cannot retrieve User A's chunks (IDOR)", async () => {
+      const docA = await DocumentModel.create({
+        userId: new Types.ObjectId(userAId),
+        fileName: "Stage 9 Secret User A Doc.pdf",
+        pageCount: 1,
+        status: "ready",
+      });
+
+      await storeChunks(docA._id.toString(), userAId, [
+        {
+          chunkId: "chunk_1_secret",
+          pageNumber: 1,
+          text: "Top secret internal financial data for User A.",
+          embedding: [1.0, 0.0, 0.0],
+        },
+      ]);
+
+      const searchResA = await searchSimilarChunks(
+        docA._id.toString(),
+        userAId,
+        [1.0, 0.0, 0.0],
+        5
+      );
+      expect(searchResA.length).toBe(1);
+      expect(searchResA[0]?.chunkId).toBe("chunk_1_secret");
+      expect(searchResA[0]?.score).toBeCloseTo(1.0, 4);
+
+      const searchResB = await searchSimilarChunks(
+        docA._id.toString(),
+        userBId,
+        [1.0, 0.0, 0.0],
+        5
+      );
+      expect(searchResB.length).toBe(0);
+    });
+  });
+
+  // ─── C. Question Source Attribution & Historical Attempt Snapshots ─────────
+  describe("Question Source Attribution & Attempt Snapshots", () => {
+    it("saves source attribution in quiz questions and preserves it in historical Attempt snapshot", async () => {
+      const createRes = await request(app)
+        .post("/api/quizzes")
+        .set("Cookie", userACookie)
+        .send({
+          title: "Stage 9 Test RAG Attributed Quiz",
+          description: "Quiz generated from Stage 9 PDF",
+          sourceType: "pdf-ai",
+          sourceMetadata: { fileName: "Kubernetes-Guide.pdf", pageCount: 12 },
+          questions: [
+            {
+              question: "What is a Kubernetes Pod?",
+              options: [
+                "The smallest deployable unit in Kubernetes",
+                "A physical server rack",
+                "A Docker image registry",
+                "A DNS load balancer",
+              ],
+              correctAnswer: 0,
+              explanation: "Pods are the smallest deployable units of computing in Kubernetes.",
+              source: {
+                pageNumber: 3,
+                chunkId: "chunk_3_1",
+              },
+            },
+            {
+              question: "Which component runs on each node to ensure containers are running?",
+              options: ["kube-scheduler", "kube-controller-manager", "kubelet", "etcd"],
+              correctAnswer: 2,
+              explanation: "The kubelet is an agent that runs on each node in the cluster.",
+              source: {
+                pageNumber: 7,
+                chunkId: "chunk_7_0",
+              },
+            },
+          ],
+        });
+
+      expect(createRes.status).toBe(201);
+      expect(createRes.body.sourceType).toBe("pdf-ai");
+      expect(createRes.body.sourceMetadata?.fileName).toBe("Kubernetes-Guide.pdf");
+      expect(createRes.body.questions[0].source?.pageNumber).toBe(3);
+      expect(createRes.body.questions[1].source?.pageNumber).toBe(7);
+      const quizId = createRes.body.id;
+
+      const submitRes = await request(app)
+        .post(`/api/quizzes/${quizId}/submit`)
+        .set("Cookie", userACookie)
+        .send({
+          answers: [
+            { questionIndex: 0, selectedOption: 0 },
+            { questionIndex: 1, selectedOption: 2 },
+          ],
+        });
+
+      expect(submitRes.status).toBe(201);
+      const attemptId = submitRes.body.id;
+
+      expect(submitRes.body.questionSnapshot).toHaveLength(2);
+      expect(submitRes.body.questionSnapshot[0].source?.pageNumber).toBe(3);
+      expect(submitRes.body.questionSnapshot[0].source?.chunkId).toBe("chunk_3_1");
+      expect(submitRes.body.questionSnapshot[1].source?.pageNumber).toBe(7);
+      expect(submitRes.body.questionSnapshot[1].source?.chunkId).toBe("chunk_7_0");
+
+      const reviewRes = await request(app)
+        .get(`/api/attempts/${attemptId}`)
+        .set("Cookie", userACookie);
+
+      expect(reviewRes.status).toBe(200);
+      expect(reviewRes.body.questionSnapshot[0].source?.pageNumber).toBe(3);
+      expect(reviewRes.body.questionSnapshot[1].source?.pageNumber).toBe(7);
+
+      await request(app)
+        .put(`/api/quizzes/${quizId}`)
+        .set("Cookie", userACookie)
+        .send({
+          title: "Stage 9 Test Modified Title",
+          questions: [
+            {
+              question: "Changed Question Text",
+              options: ["A", "B", "C", "D"],
+              correctAnswer: 1,
+              explanation: "Changed explanation",
+              source: { pageNumber: 99, chunkId: "chunk_99_0" },
+            },
+          ],
+        });
+
+      const reviewAfterEdit = await request(app)
+        .get(`/api/attempts/${attemptId}`)
+        .set("Cookie", userACookie);
+
+      expect(reviewAfterEdit.status).toBe(200);
+      expect(reviewAfterEdit.body.quizTitle).toBe("Stage 9 Test RAG Attributed Quiz");
+      expect(reviewAfterEdit.body.questionSnapshot[0].question).toBe("What is a Kubernetes Pod?");
+      expect(reviewAfterEdit.body.questionSnapshot[0].source?.pageNumber).toBe(3);
+
+      await request(app)
+        .delete(`/api/quizzes/${quizId}`)
+        .set("Cookie", userACookie);
+
+      const reviewAfterDelete = await request(app)
+        .get(`/api/attempts/${attemptId}`)
+        .set("Cookie", userACookie);
+
+      expect(reviewAfterDelete.status).toBe(200);
+      expect(reviewAfterDelete.body.questionSnapshot[0].source?.pageNumber).toBe(3);
+      expect(reviewAfterDelete.body.questionSnapshot[1].source?.pageNumber).toBe(7);
+    });
+  });
+
+  // ─── D. PDF Endpoint Security & Validation ─────────────────────────────────
+  describe("PDF Generation Route Security & Validation", () => {
+    it("denies unauthenticated requests to /api/quiz/generate-from-pdf with 401", async () => {
+      const res = await request(app)
+        .post("/api/quiz/generate-from-pdf")
+        .attach("file", samplePdfBuffer, "test.pdf");
+
+      expect(res.status).toBe(401);
+    });
+
+    it("rejects request missing PDF file with 400", async () => {
+      const res = await request(app)
+        .post("/api/quiz/generate-from-pdf")
+        .set("Cookie", userACookie);
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/a pdf file is required|no pdf file uploaded/i);
+    });
+
+    it("rejects non-PDF files (e.g. .txt or corrupt binary) with 400", async () => {
+      const res = await request(app)
+        .post("/api/quiz/generate-from-pdf")
+        .set("Cookie", userACookie)
+        .attach("file", Buffer.from("plain text content"), "not-a-pdf.txt");
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/only pdf files are allowed|failed to extract/i);
+    });
+  });
+});
+
+
 
 
 

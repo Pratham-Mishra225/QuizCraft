@@ -14,6 +14,17 @@ export const SourceMetadataSchema = z
   .nullable()
   .optional();
 
+export const QuestionSourceSchema = z
+  .object({
+    documentId: z.string().optional(),
+    chunkId: z.string().optional(),
+    pageNumber: z.number().int().min(1).optional(),
+  })
+  .optional()
+  .nullable();
+
+export type QuestionSource = z.infer<typeof QuestionSourceSchema>;
+
 /**
  * Question validation schema for manual creation & updates.
  * Guarantees:
@@ -22,6 +33,7 @@ export const SourceMetadataSchema = z
  * - 4 distinct options (case-insensitive deduplication)
  * - Integer correctAnswer in range 0..3
  * - Optional explanation string (max 2000 chars)
+ * - Optional source citation
  */
 export const QuestionSchema = z.object({
   question: z
@@ -52,9 +64,11 @@ export const QuestionSchema = z.object({
     .max(2000, "Explanation must not exceed 2000 characters")
     .optional()
     .default(""),
+  source: QuestionSourceSchema.default(null),
 });
 
 export type ValidatedQuestion = z.infer<typeof QuestionSchema>;
+
 
 /**
  * Schema for creating a new quiz.
@@ -154,6 +168,8 @@ export const QuestionSnapshotSchema = z.object({
   options: z.array(z.string()).length(4),
   correctAnswer: z.number().int().min(0).max(3),
   explanation: z.string().optional().default(""),
+  source: QuestionSourceSchema.default(null),
 });
 
 export type QuestionSnapshot = z.infer<typeof QuestionSnapshotSchema>;
+

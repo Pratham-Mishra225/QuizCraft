@@ -22,7 +22,9 @@ import {
   Check,
   X,
   HelpCircle,
+  FileText,
 } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 
 type FilterMode = "all" | "correct" | "incorrect";
@@ -475,9 +477,20 @@ export default function ResultsDetailPage() {
                           </div>
                         </div>
                       )}
+
+                      {/* Source Attribution for RAG / PDF-generated quizzes */}
+                      {snap.source?.pageNumber && (
+                        <div className="mt-3 text-xs text-muted-foreground flex items-center gap-1.5 bg-muted/40 w-fit px-3 py-1.5 rounded-lg border border-border/60">
+                          <FileText className="size-3.5 text-primary" />
+                          <span className="font-medium">
+                            Source: Page {snap.source.pageNumber}
+                          </span>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 );
+
               })
             ) : (
               <Card className="border-dashed bg-muted/20">

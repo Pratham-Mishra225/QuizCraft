@@ -88,8 +88,8 @@ const QuizSchema = new Schema<IQuiz>(
   { timestamps: true }
 );
 
-// Query index: find quizzes by creator sorted by newest first
-QuizSchema.index({ createdBy: 1, createdAt: -1 });
+// Supports: GET /api/quizzes — creator dashboard sorted newest first
+QuizSchema.index({ createdBy: 1, createdAt: -1 }, { name: "quiz_creator_createdAt" });
 
 export const Quiz = mongoose.model<IQuiz>("Quiz", QuizSchema);
 

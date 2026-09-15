@@ -25,9 +25,9 @@ const DocumentChunkSchema = new Schema<IDocumentChunk>(
   { timestamps: true }
 );
 
-// Indexes: lookup chunks for a document scoped to user
-DocumentChunkSchema.index({ documentId: 1, userId: 1 });
-DocumentChunkSchema.index({ userId: 1 });
+// Supports: searchSimilarChunks — vector retrieval scoped strictly to document + user (IDOR protection)
+// NOTE: No separate { userId: 1 } index — no production query filters chunks by userId alone.
+DocumentChunkSchema.index({ documentId: 1, userId: 1 }, { name: "chunk_document_user" });
 
 export const DocumentChunk = mongoose.model<IDocumentChunk>(
   "DocumentChunk",

@@ -30,7 +30,7 @@ const DocumentSchema = new Schema<IDocument>(
   { timestamps: true }
 );
 
-// Indexes: lookup user documents sorted by newest first
-DocumentSchema.index({ userId: 1, createdAt: -1 });
+// Supports: document history listing sorted newest first
+DocumentSchema.index({ userId: 1, createdAt: -1 }, { name: "document_user_createdAt" });
 
 export const DocumentModel = mongoose.model<IDocument>("Document", DocumentSchema);

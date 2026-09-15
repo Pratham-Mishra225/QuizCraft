@@ -84,8 +84,9 @@ const AttemptSchema = new Schema<IAttempt>(
   { timestamps: true }
 );
 
-// Indexes: user attempt history sorted by completedAt desc; quiz lookup
-AttemptSchema.index({ userId: 1, completedAt: -1 });
-AttemptSchema.index({ quizId: 1 });
+// Supports: GET /api/attempts — user history sorted newest first
+AttemptSchema.index({ userId: 1, completedAt: -1 }, { name: "attempt_user_completedAt" });
+// Supports: quiz-level attempt lookups (e.g. quiz deletion cascade, public quiz attempts)
+AttemptSchema.index({ quizId: 1 }, { name: "attempt_quizId" });
 
 export const Attempt = mongoose.model<IAttempt>("Attempt", AttemptSchema);

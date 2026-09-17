@@ -44,7 +44,7 @@ const envSchema = z.object({
   /**
    * RAG & PDF pipeline configuration
    */
-  EMBEDDING_MODEL: z.string().optional().default("text-embedding-004"),
+  EMBEDDING_MODEL: z.string().optional().default("gemini-embedding-001"),
   RAG_TOP_K: z.coerce.number().int().min(1).max(20).optional().default(5),
   RAG_CHUNK_SIZE: z.coerce.number().int().min(100).max(4000).optional().default(800),
   RAG_CHUNK_OVERLAP: z.coerce.number().int().min(0).max(1000).optional().default(150),

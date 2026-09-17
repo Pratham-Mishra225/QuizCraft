@@ -4,6 +4,14 @@ packages:
   - lib/integrations/*
   - scripts
 
+onlyBuiltDependencies:
+  - '@google/genai'
+  - '@swc/core'
+  - esbuild
+  - msw
+  - protobufjs
+  - unrs-resolver
+
 autoInstallPeers: false
 
 catalog:
@@ -33,12 +41,6 @@ minimumReleaseAge: 1440
 
 minimumReleaseAgeExclude:
   - stripe-replit-sync
-
-onlyBuiltDependencies:
-  - '@swc/core'
-  - esbuild
-  - msw
-  - unrs-resolver
 
 overrides:
   '@esbuild-kit/esm-loader': npm:tsx@^4.21.0

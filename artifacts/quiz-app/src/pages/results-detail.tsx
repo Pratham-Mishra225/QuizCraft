@@ -1,10 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link, useLocation, useParams } from "wouter";
 import { useGetAttempt, getGetAttemptQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Layout } from "@/components/layout";
+import { PageLoader } from "@/components/ui/page-loader";
 import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
 import {
@@ -41,6 +42,12 @@ export default function ResultsDetailPage() {
       queryKey: getGetAttemptQueryKey(id || ""),
     },
   });
+
+  useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
+      setLocation("/auth");
+    }
+  }, [isAuthLoading, isAuthenticated, setLocation]);
 
   const percent = useMemo(() => {
     if (!attempt || !attempt.totalQuestions || attempt.totalQuestions <= 0) return 0;
@@ -83,29 +90,12 @@ export default function ResultsDetailPage() {
     return questionEvaluations;
   }, [questionEvaluations, filter]);
 
-  if (isAuthLoading) {
-    return (
-      <Layout>
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="size-8 animate-spin text-primary" />
-        </div>
-      </Layout>
-    );
+  if (isAuthLoading || isAttemptLoading) {
+    return <PageLoader />;
   }
 
   if (!isAuthenticated) {
-    setLocation("/auth");
     return null;
-  }
-
-  if (isAttemptLoading) {
-    return (
-      <Layout>
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="size-8 animate-spin text-primary" />
-        </div>
-      </Layout>
-    );
   }
 
   if (error || !attempt) {

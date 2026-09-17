@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import {
   useGetQuiz,
@@ -14,6 +14,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Layout } from "@/components/layout";
+import { PageLoader } from "@/components/ui/page-loader";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowRight,
@@ -67,19 +68,18 @@ export default function QuizTakePage() {
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [revealed, setRevealed] = useState<Record<number, boolean>>({});
 
+  useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
+      setLocation("/auth");
+    }
+  }, [isAuthLoading, isAuthenticated, setLocation]);
+
   if (!isAuthLoading && !isAuthenticated) {
-    setLocation("/auth");
     return null;
   }
 
   if (isQuizLoading || isAuthLoading) {
-    return (
-      <Layout>
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="size-8 animate-spin text-primary" />
-        </div>
-      </Layout>
-    );
+    return <PageLoader />;
   }
 
   if (!quiz) {

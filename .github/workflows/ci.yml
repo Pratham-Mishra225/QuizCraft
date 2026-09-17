@@ -30,13 +30,13 @@ jobs:
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "22.17.1"
 
       # 3. pnpm 11 - matches local dev install (11.1.1)
       - name: Set up pnpm 11
         uses: pnpm/action-setup@v4
         with:
-          version: "11"
+          version: "11.1.1"
 
       # 4. Cache keyed on lockfile - changes invalidate automatically
       - name: Restore pnpm cache

@@ -5,12 +5,12 @@ packages:
   - scripts
 
 allowBuilds:
-  - '@google/genai': true
-  - '@swc/core': true
-  - esbuild: true
-  - msw: true
-  - protobufjs: true
-  - unrs-resolver: true
+  '@google/genai': true
+  '@swc/core': true
+  esbuild: true
+  msw: true
+  protobufjs: true
+  unrs-resolver: true
 
 autoInstallPeers: false
 

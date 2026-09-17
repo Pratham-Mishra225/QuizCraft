@@ -1,0 +1,64 @@
+# render.yaml -- Render Native Node Deployment
+# ========================================================================
+# This file documents the Render service configuration for Quiz-Master-Hub.
+#
+# DEPLOYMENT MODEL: Render native Node.js service (NO Docker, no containers).
+# Express serves both /api/* and the React SPA static build from one process.
+#
+# HOW TO USE
+# ========================================================================
+# Option A -- Dashboard (recommended for first deployment):
+#   1. Create a new "Web Service" in the Render dashboard.
+#   2. Connect this GitHub repository.
+#   3. Set Build Command and Start Command as shown below.
+#   4. Add all required environment variables from the dashboard.
+#
+# Option B -- Infrastructure as Code:
+#   Render will auto-detect this file. Review settings and confirm.
+#
+# REQUIRED ENVIRONMENT VARIABLES (set in Render dashboard -- never commit secrets)
+# ========================================================================
+#   NODE_ENV                         = production
+#   MONGODB_URI                      = mongodb+srv://<user>:<password>@<cluster>.mongodb.net/<db>
+#   JWT_SECRET                       = <minimum 32 char random hex string>
+#   AI_INTEGRATIONS_GEMINI_API_KEY  = <your Gemini API key>
+#   AI_INTEGRATIONS_GEMINI_BASE_URL = https://generativelanguage.googleapis.com
+#   FRONTEND_URL                     = https://<your-render-domain>.onrender.com
+#   AUTH_TOKEN_TTL                   = 7d          (optional, default: 7d)
+#   LOG_LEVEL                        = info        (optional, default: info)
+#   EMBEDDING_MODEL                  = gemini-embedding-001  (optional)
+#   RAG_TOP_K                        = 5           (optional)
+#   RAG_CHUNK_SIZE                   = 800         (optional)
+#   RAG_CHUNK_OVERLAP                = 150         (optional)
+#   PDF_MAX_PAGES                    = 50          (optional)
+#
+# PORT is set automatically by Render -- do NOT set it manually.
+
+services:
+  - type: web
+    name: quiz-master-hub
+    runtime: node
+    plan: free  # change to starter/standard for production workloads
+
+    # Build:
+    #  1. Install all workspace dependencies with lockfile enforcement.
+    #  2. Build backend (esbuild -> artifacts/api-server/dist/index.mjs).
+    #  3. Build frontend (Vite -> artifacts/quiz-app/dist/public/).
+    #     Express serves the frontend static files at runtime.
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @workspace/api-server run build && pnpm --filter @workspace/quiz-app run build
+
+    # Start:
+    # Launch the compiled Express bundle.
+    # --env-file is NOT used -- Render injects env into process.env at runtime.
+    # PORT is provided by Render dynamically; the server reads process.env.PORT.
+    startCommand: node --enable-source-maps artifacts/api-server/dist/index.mjs
+
+    # Health check: /api/healthz returns 200 without authentication.
+    healthCheckPath: /api/healthz
+
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      # All secret values must be added via the Render dashboard, not here.

@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - production-hardening
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Typecheck - Test - Build
+    runs-on: ubuntu-latest
+
+    env:
+      # Keeps pnpm store inside the workspace so the cache action can find it.
+      PNPM_HOME: ${{ github.workspace }}/.pnpm-store
+
+    steps:
+      # 1. Checkout source
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Node.js 22 LTS - matches local dev environment (v22.x = v22.17.1 locally)
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # 3. pnpm 11 - matches local dev install (11.1.1)
+      - name: Set up pnpm 11
+        uses: pnpm/action-setup@v4
+        with:
+          version: "11"
+
+      # 4. Cache keyed on lockfile - changes invalidate automatically
+      - name: Restore pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PNPM_HOME }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      # 5. Install --frozen-lockfile enforces lockfile consistency
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 6. Typecheck - covers api-server, quiz-app, scripts, and shared libs
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # 7. Tests - integration suite against MongoDB Atlas
+      #    MONGODB_URI secret provides the connection string.
+      #    vitest.config.ts has a fallback test cluster URI so CI runs
+      #    without the secret, but configuring the secret is recommended.
+      - name: Run tests
+        run: pnpm --filter @workspace/api-server test
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+
+      # 8. Build backend - esbuild compiles to artifacts/api-server/dist/
+      - name: Build backend
+        run: pnpm --filter @workspace/api-server run build
+
+      # 9. Build frontend - Vite outputs to artifacts/quiz-app/dist/public/
+      #    The pre-existing chunk-size advisory does not fail the build.
+      - name: Build frontend
+        run: pnpm --filter @workspace/quiz-app run build

@@ -1,4 +1,4 @@
-import { embedText } from "../embeddings/embed.js";
+import { embedText, TASK_TYPE_QUERY } from "../embeddings/embed.js";
 import { searchSimilarChunks, type ScoredChunk } from "./vectorStore.js";
 import { env } from "../../config/env.js";
 
@@ -64,8 +64,8 @@ export async function retrieveContextForQuery(
 ): Promise<ScoredChunk[]> {
   const topK = options?.topK ?? env.RAG_TOP_K;
 
-  // 1. Generate embedding for user query
-  const queryEmbedding = await embedText(query);
+  // 1. Generate embedding for user query using RETRIEVAL_QUERY task type
+  const queryEmbedding = await embedText(query, TASK_TYPE_QUERY);
 
   // 2. Perform vector similarity search (fetch up to 2x topK for diversification)
   const candidateChunks = await searchSimilarChunks(

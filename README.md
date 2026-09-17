@@ -24,6 +24,41 @@ Built as a high-performance TypeScript monorepo, QuizCraft features a React 19 s
 
 ---
 
+## Screenshots
+
+### 1. Landing & Authentication
+| Public Homepage | Authenticated Dashboard |
+|---|---|
+| ![Public Homepage](docs/images/HomePage.png) | ![Authenticated Dashboard](docs/images/User_HomePage.png) |
+
+| Account Registration & Sign-In |
+|:---:|
+| ![Sign-up Page](docs/images/Sign-up%20Page.png) |
+
+---
+
+### 2. Quiz Creation Modes
+| Manual Quiz Builder | AI Topic Generator |
+|---|---|
+| ![Create Manual Quiz](docs/images/Create_Manual_Quiz.png) | ![Create AI Quiz](docs/images/Create_AI_Quiz.png) |
+
+| PDF Document RAG Generation |
+|:---:|
+| ![Create PDF Quiz](docs/images/Create_PDF_Quiz.png) |
+
+---
+
+### 3. Taking Quizzes & Reviewing Performance
+| Active Quiz Interface | Result & Explanation Review |
+|---|---|
+| ![Quiz Question Interface](docs/images/Quiz_mcqs.png) | ![Result Screen](docs/images/Result_Screen.png) |
+
+| User Performance Analytics & Attempt History |
+|:---:|
+| ![Performance Screen](docs/images/Performance_Screen.png) |
+
+---
+
 ## Architecture
 
 In production, QuizCraft operates as a unified single-service web application on Render. Express serves the REST API endpoints under `/api/*` and delivers the compiled React SPA static bundle with an SPA fallback for client-side routing.

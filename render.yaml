@@ -36,7 +36,7 @@
 
 services:
   - type: web
-    name: quiz-master-hub
+    name: quizcraft
     runtime: node
     plan: free  # change to starter/standard for production workloads
 
@@ -45,7 +45,7 @@ services:
     #  2. Build backend (esbuild -> artifacts/api-server/dist/index.mjs).
     #  3. Build frontend (Vite -> artifacts/quiz-app/dist/public/).
     #     Express serves the frontend static files at runtime.
-    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @workspace/api-server run build && pnpm --filter @workspace/quiz-app run build
+    buildCommand: pnpm install --frozen-lockfile && pnpm run build
 
     # Start:
     # Launch the compiled Express bundle.
@@ -54,7 +54,7 @@ services:
     startCommand: node --enable-source-maps artifacts/api-server/dist/index.mjs
 
     # Health check: /api/healthz returns 200 without authentication.
-    healthCheckPath: /api/healthz
+    healthCheckPath: /healthz
 
     envVars:
       - key: NODE_VERSION

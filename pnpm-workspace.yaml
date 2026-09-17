@@ -4,13 +4,13 @@ packages:
   - lib/integrations/*
   - scripts
 
-onlyBuiltDependencies:
-  - '@google/genai'
-  - '@swc/core'
-  - esbuild
-  - msw
-  - protobufjs
-  - unrs-resolver
+allowBuilds:
+  - '@google/genai': true
+  - '@swc/core': true
+  - esbuild: true
+  - msw: true
+  - protobufjs: true
+  - unrs-resolver: true
 
 autoInstallPeers: false
 

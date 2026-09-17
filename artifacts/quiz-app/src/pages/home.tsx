@@ -12,6 +12,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Layout } from "@/components/layout";
+import { PageLoader } from "@/components/ui/page-loader";
+import { ErrorState } from "@/components/ui/error-state";
 import { useToast } from "@/hooks/use-toast";
 import {
   PlusCircle,
@@ -34,14 +36,24 @@ export default function HomePage() {
   const queryClient = useQueryClient();
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const { data: quizzes, isLoading: isQuizzesLoading } = useGetQuizzes({
+  const {
+    data: quizzes,
+    isLoading: isQuizzesLoading,
+    error: quizzesError,
+    refetch: refetchQuizzes,
+  } = useGetQuizzes({
     query: {
       queryKey: getGetQuizzesQueryKey(),
-      enabled: true,
+      enabled: isAuthenticated,
     },
   });
 
-  const { data: attempts, isLoading: isAttemptsLoading } = useGetAttempts({
+  const {
+    data: attempts,
+    isLoading: isAttemptsLoading,
+    error: attemptsError,
+    refetch: refetchAttempts,
+  } = useGetAttempts({
     query: {
       queryKey: getGetAttemptsQueryKey(),
       enabled: isAuthenticated,
@@ -109,13 +121,7 @@ export default function HomePage() {
   };
 
   if (isAuthLoading) {
-    return (
-      <Layout>
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="size-8 animate-spin text-primary" />
-        </div>
-      </Layout>
-    );
+    return <PageLoader />;
   }
 
   return (
@@ -166,7 +172,27 @@ export default function HomePage() {
               </div>
             </div>
             
-            {isQuizzesLoading ? (
+            {!isAuthenticated ? (
+              <Card className="border-dashed bg-muted/20">
+                <CardContent className="flex flex-col items-center justify-center py-16 text-center space-y-4">
+                  <div className="size-16 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-2">
+                    <Lock className="size-8 opacity-50" />
+                  </div>
+                  <h3 className="text-xl font-semibold">Sign in to view quizzes</h3>
+                  <p className="text-muted-foreground max-w-sm">
+                    Please sign in or create an account to view available quizzes and track your progress.
+                  </p>
+                  <div className="flex gap-3 pt-2">
+                    <Link href="/auth">
+                      <Button className="shadow-sm hover-elevate">Sign In</Button>
+                    </Link>
+                    <Link href="/auth">
+                      <Button variant="outline" className="shadow-sm hover-elevate">Create Account</Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : isQuizzesLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[1, 2, 3].map(i => (
                   <Card key={i} className="animate-pulse">
@@ -174,6 +200,14 @@ export default function HomePage() {
                   </Card>
                 ))}
               </div>
+            ) : quizzesError ? (
+              <Card className="border-dashed bg-muted/10">
+                <ErrorState
+                  title="Failed to load quizzes"
+                  message="There was a problem loading available quizzes. Please try again."
+                  onRetry={() => refetchQuizzes()}
+                />
+              </Card>
             ) : quizzes && quizzes.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {quizzes.map((quiz) => {
@@ -329,6 +363,14 @@ export default function HomePage() {
                     </Card>
                   ))}
                 </div>
+              ) : attemptsError ? (
+                <Card className="border-dashed bg-muted/10">
+                  <ErrorState
+                    title="Failed to load attempts"
+                    message="There was a problem loading your recent attempts."
+                    onRetry={() => refetchAttempts()}
+                  />
+                </Card>
               ) : attempts && attempts.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {attempts.slice(0, 3).map((attempt) => {

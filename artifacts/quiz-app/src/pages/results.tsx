@@ -3,28 +3,29 @@ import { useGetAttempts, getGetAttemptsQueryKey } from "@workspace/api-client-re
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Layout } from "@/components/layout";
+import { PageLoader } from "@/components/ui/page-loader";
+import { ErrorState } from "@/components/ui/error-state";
 import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
-import { BarChart2, Calendar, Trophy, ArrowRight, Loader2, ArrowLeft } from "lucide-react";
+import { BarChart2, Calendar, Trophy, ArrowRight, ArrowLeft } from "lucide-react";
 
 export default function ResultsPage() {
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   
-  const { data: attempts, isLoading: isAttemptsLoading } = useGetAttempts({
+  const {
+    data: attempts,
+    isLoading: isAttemptsLoading,
+    error: attemptsError,
+    refetch: refetchAttempts,
+  } = useGetAttempts({
     query: {
       queryKey: getGetAttemptsQueryKey(),
       enabled: isAuthenticated,
-    }
+    },
   });
 
   if (isAuthLoading) {
-    return (
-      <Layout>
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="size-8 animate-spin text-primary" />
-        </div>
-      </Layout>
-    );
+    return <PageLoader />;
   }
 
   if (!isAuthenticated) {
@@ -98,9 +99,17 @@ export default function ResultsPage() {
                 </Card>
               ))}
             </div>
+          ) : attemptsError ? (
+            <Card className="border-dashed bg-muted/10">
+              <ErrorState
+                title="Failed to load results"
+                message="There was a problem loading your attempt history. Please try again."
+                onRetry={() => refetchAttempts()}
+              />
+            </Card>
           ) : attempts && attempts.length > 0 ? (
             <div className="grid gap-4">
-              {attempts.sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()).map((attempt) => {
+              {[...attempts].sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()).map((attempt) => {
                 const percent = Math.round((attempt.score / attempt.totalQuestions) * 100);
                 
                 return (

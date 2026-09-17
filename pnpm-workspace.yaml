@@ -5,11 +5,11 @@ packages:
   - scripts
 
 onlyBuiltDependencies:
-  - '@google/genai@1.51.0'
+  - '@google/genai'
   - '@swc/core'
-  - esbuild@0.27.3
+  - esbuild
   - msw
-  - protobufjs@7.5.6
+  - protobufjs
   - unrs-resolver
 
 autoInstallPeers: false

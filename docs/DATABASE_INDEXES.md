@@ -1,7 +1,5 @@
 # Database Index Strategy
 
-_Stage 11 — Database Optimization_
-
 This document records the indexes declared in each Mongoose schema, the queries they support, and the rationale behind every decision — including indexes that were deliberately **not** added.
 
 ---
